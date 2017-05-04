@@ -1,0 +1,60 @@
+!urxvt*depth: 32
+!urxvt*background: rgba:0000/0000/0200/c800
+
+urxvt*transparent: true
+urxvt*shading: 80
+
+URxvt*.font: xft:monospace:size=10
+
+Xft.antialias: 1
+Xft.autohint: 0
+Xft.lcdfilter: lcddefault
+Xft.hintstyle: hintslight
+Xft.rgba: rgb
+Xft.dpi: 95
+
+
+!------------------------------------------------------------------------------
+! c o l o r -  s e t t i n g s
+URxvt.background: #383C4A
+URxvt.foreground: #ECF0F1 
+URxvt.cursorColor: #ECF0F1 
+
+!black URxvt.color0: #222222 
+URxvt.color8: #666666 
+
+!red 
+URxvt.color1: #E74C3C 
+URxvt.color9: #E74C3C 
+
+!green 
+URxvt.color2: #27AE60 
+URxvt.color10: #2ECC71 
+!yellow 
+URxvt.color3: #F39C12 
+URxvt.color11: #F1C40F 
+
+!blue 
+
+URxvt.color4: #3498DB 
+URxvt.color12: #3498DB 
+
+!magenta 
+URxvt.color5: #9B59B6 
+URxvt.color13: #9B59B6 
+
+!cyan 
+URxvt.color6: #95A5A6 
+URxvt.color14: #95A5A6 
+
+!white 
+URxvt.color7: #ECF0F1 
+URxvt.color15: #ECF0F1
+
+!------------------------------------------------------------------------------
+! u r x v t
+
+URxvt*geometry:         112x22  
+URxvt*scrollBar:        false
+URxvt*scrollBar_right:        true
+URxvt*scrollColor:        #000000
