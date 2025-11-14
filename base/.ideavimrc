@@ -1,0 +1,97 @@
+" Plugins
+Plug 'tpope/vim-surround'
+Plug 'machakann/vim-highlightedyank'
+Plug 'easymotion/vim-easymotion'
+Plug 'vim-scripts/argtextobj.vim'
+
+
+let mapleader = " "
+
+set multiple-cursors
+set idearefactormode=keep
+set argtextobj
+set functiontextobj
+
+inoremap jk <esc>
+
+inoremap <C-k> <up>
+inoremap <C-j> <down>
+
+" H & L for home/end operations
+map H 0
+map L $
+
+" pane/window movements
+noremap <leader>wh <C-w>h
+noremap <leader>wj <C-w>j
+noremap <leader>wk <C-w>k
+noremap <leader>wl <C-w>l
+
+noremap <leader>wm :action MoveEditorToOppositeTabGroup<CR>
+noremap <leader>wu :action Unsplit<CR>
+noremap <leader>wU :action UnsplitAll<CR>
+
+" easier save/quit commands
+nmap <leader>q :q<CR>
+nmap <leader>ww :w<CR>
+nmap <leader>wq :wq<CR>
+
+" tabs
+nmap <leader>th :action PreviousTab<CR>
+nmap <leader>tl :action NextTab<CR>
+nmap <leader>tt :action CloseAllEditorsButActive<CR>
+
+" use IntelliJ's search in file
+nnoremap / :action Find<CR>
+
+" undo
+nmap <S-u> <C-r>
+
+" easier visual selection for blocks
+nmap cib ci{
+nmap cip ci(
+nmap vib vi{
+nmap vip vi(
+nmap dib di{
+nmap dip di(
+
+" finding things
+nmap <leader>ff :action GotoFile<CR>
+nmap <leader>fi :action FindInPath<CR>
+nmap <leader>fs :action GotoSymbol<CR>
+nmap <leader>fu :action FindUsages<CR>
+nmap <leader>fa :action FindActions<CR>
+
+" code things
+nmap <leader>cr :action RefactoringMenu<CR>
+nmap <leader>cf :action ReformatCode<CR>
+vmap <leader>cf :action ReformatCode<CR>
+nmap <leader>rn :action RenameElement<CR>
+
+" jumping around
+map ; <Plug>(easymotion-s2)
+
+" make y and p use system clipboard by default
+nnoremap y "+y
+vnoremap y "+y
+nnoremap Y "+Y
+vnoremap Y "+Y
+nnoremap p "+p
+nnoremap P "+P
+
+" generic marks
+nnoremap mm :action ToggleBookmark<CR>
+nnoremap ml :action ShowBookmarks<CR>
+
+" go to:
+" noremap <leader>gf :action GotoFile<CR>
+noremap <leader>gi :action GotoImplementation<CR>
+noremap <leader>gd :action GotoDeclaration<CR>
+noremap <leader>ga :action GotoAction<CR>
+
+" multiple cursors
+nmap <A-j> :action EditorCloneCaretBelow<CR>
+nmap <A-k> :action EditorCloneCaretAbove<CR>
+nmap <A-n> :action <Plug>NextOccurrence<CR>
+nmap <A-p> :action <Plug>RemoveOccurrence<CR>
+xmap <A-a> <Plug>AllOccurrences
