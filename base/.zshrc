@@ -18,10 +18,12 @@ zle -N edit-command-line
 bindkey '^E' edit-command-line
 
 # Plugins
+# git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+# git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.zsh/zsh-syntax-highlighting
 source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-# bindkey -e   # Emacs mode (or bindkey -v for Vi mode)
+# --- VI mode setup ---
 bindkey -v # vi mode 
 KEYTIMEOUT=20
 
@@ -60,6 +62,35 @@ zle-line-init() {
 zle -N zle-line-init
 echo -ne '\e[5 q' # Use beam shape cursor on startup.
 preexec() { echo -ne '\e[5 q' ;} # Use beam shape cursor for each new prompt.
+
+# Copy paste 
+# Save original widgets 
+zle -A vi-yank       orig-vi-yank
+zle -A vi-put-after  orig-vi-put-after
+
+# Clipboard yank widget (uses normal vi operator motions) 
+vi-yank-clipboard() {
+  # Perform real vi yank (including operator-pending)
+  zle orig-vi-yank
+
+  # After the yank, the yanked text is in $CUTBUFFER
+  printf "%s" "$CUTBUFFER" | wl-copy
+}
+zle -N vi-yank-clipboard
+
+# Clipboard paste widget 
+vi-put-after-clipboard() {
+  # Paste from Wayland clipboard into CUTBUFFER
+  CUTBUFFER=$(wl-paste)
+
+  # Use normal "put after" behavior
+  zle orig-vi-put-after
+}
+zle -N vi-put-after-clipboard
+
+# Bind in vicmd map 
+bindkey -M vicmd 'y' vi-yank-clipboard
+bindkey -M vicmd 'p' vi-put-after-clipboard
 
 # Aliases
 alias ls='ls --color=auto'

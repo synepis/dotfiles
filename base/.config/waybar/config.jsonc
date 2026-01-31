@@ -16,16 +16,17 @@
     ],
     "modules-right": [
         "idle_inhibitor",
-        "pulseaudio",
-	"custom/openvpn",
+		"custom/openvpn",
         "network",
         "power-profiles-daemon",
         "cpu",
         "memory",
+		"disk",
         "temperature",
         "backlight",
         "sway/language",
         "battery",
+        "pulseaudio",
         "clock",
         "tray"
     ],
@@ -82,16 +83,24 @@
     },
     "clock": {
         // "timezone": "America/New_York",
+        "format": "{:%Y-%m-%d %H:%M}",
         "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
         "format-alt": "{:%Y-%m-%d}"
     },
     "cpu": {
         "format": "{usage}% ",
-        "tooltip": false
     },
     "memory": {
-        "format": "{}% "
+        "format": "{used} GB 󰍛",
+	    "tooltip-format": "Used: {used}\nAvailable: {avail}\nTotal: {total}"
     },
+	"disk": {
+		"path": "/",
+		"interval": 30,
+		"format": "{percentage_used}% ",
+		"tooltip": true,
+		"tooltip-format": "{used} out of {total} used ({percentage_used}%)"
+	},
     "temperature": {
         // "thermal-zone": 2,
         // "hwmon-path": "/sys/class/hwmon/hwmon2/temp1_input",
