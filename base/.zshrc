@@ -38,6 +38,9 @@ bindkey -M menuselect 'k' vi-up-line-or-history
 bindkey -M menuselect 'l' vi-forward-char
 bindkey -M menuselect 'j' vi-down-line-or-history
 
+# Case insensitive autocompletion
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+
 # For ease of autocompletion
 bindkey -M viins '^L' autosuggest-accept   # insert mode
 bindkey -M vicmd '^L' autosuggest-accept   # command mode
