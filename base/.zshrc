@@ -118,12 +118,8 @@ alias ddown="docker-compose down -v"
 # Golang
 export PATH=$PATH:/usr/local/go/bin
 
-# Enable Vertex AI integration
-export CLAUDE_CODE_USE_VERTEX=1
-export CLOUD_ML_REGION=europe-west1
-export ANTHROPIC_VERTEX_PROJECT_ID=vanta-staging
-export VERTEX_REGION_CLAUDE_4_0_SONNET=europe-west1
-export ANTHROPIC_MODEL='claude-sonnet-4-5@20250929' # latest 4.5
+# Custom for this computer
+source ~/.zshrc_local
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
