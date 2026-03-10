@@ -247,6 +247,7 @@ bindsym $mod+r mode "resize"
     bindsym Print exec --no-startup-id ~/.config/sway/screenshot.sh ~/Pictures/screenshots
 
 # Colors
+
 # class                 border  bground text    indicator child_border
 client.focused          #cccccc #777777 #FFFFFF #5F676A   #5F676A
 client.focused_inactive #000000 #343434 #888888 #292D2E   #222222
@@ -283,19 +284,21 @@ mode "keyboard_mode" {
 }
 
 # Split mode
-mode "split" {
-	bindsym v split v, mode "default"
-	bindsym h split h, mode "default"
+set $split_hightlight_cmd "swaymsg 'client.focused #cccccc #777777 #FFFFFF #00ff00 #5F676A'"
+set $split_unhightlight_cmd "swaymsg 'client.focused #cccccc #777777 #FFFFFF #5F676A #5F676A'"
 
-	bindsym Return mode "default"
-	bindsym Escape mode "default"
+mode "split" {
+	bindsym v split v, mode "default"; exec $split_unhightlight_cmd
+	bindsym h split h, mode "default"; exec $split_unhightlight_cmd
+
+	bindsym Return mode "default"; exec $split_unhightlight_cmd
+	bindsym Escape mode "default"; exec $split_unhightlight_cmd
 }
-bindsym $mod+s mode "split"
+bindsym $mod+s mode "split"; exec $split_hightlight_cmd
 
 # Locking of the screen
-#bindsym $mod+o exec "swaylock -i /usr/share/backgrounds/default.jxl"
-
 bindsym $mod+o exec "swaylock -i $wallpaper" 
+
 # Network Applet
 exec nm-applet
 
