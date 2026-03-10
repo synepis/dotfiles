@@ -38,8 +38,10 @@ bindkey -M menuselect 'k' vi-up-line-or-history
 bindkey -M menuselect 'l' vi-forward-char
 bindkey -M menuselect 'j' vi-down-line-or-history
 
-# Case insensitive autocompletion
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+# Smart autocompletion
+# Allow case-insensitive completion unless you type a capital letter
+# Also handles partial completion with '-' (e.g. 'u-b' -> 'usr-bin')
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
 
 # For ease of autocompletion
 bindkey -M viins '^L' autosuggest-accept   # insert mode
