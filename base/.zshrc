@@ -27,6 +27,9 @@ source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 bindkey -v # vi mode 
 KEYTIMEOUT=20
 
+# Load fzf keybindings and completion
+source <(fzf --zsh)
+
 # My common vim rebinding
 bindkey -M viins 'jk' vi-cmd-mode
 bindkey -M vicmd 'H' beginning-of-line 
@@ -119,7 +122,7 @@ alias ddown="docker-compose down -v"
 export PATH=$PATH:/usr/local/go/bin
 
 # Custom for this computer
-source ~/.zshrc_local
+# source ~/.zshrc_local
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
