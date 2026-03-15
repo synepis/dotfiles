@@ -96,6 +96,7 @@ button:hover {
 #power-profiles-daemon,
 #language,
 #custom-openvpn,
+#custom-screen-recorder,
 #mpd {
     padding: 0 10px;
     color: #ffffff;
@@ -269,4 +270,28 @@ background-color: transparent;
 
 #privacy-item.audio-out {
     background-color: #0069d4;
+}
+
+#custom-screen-recorder.recording {
+	color: #ff5555; /* Bright Red */
+	font-weight: bold;
+
+	/* Define the animation */
+    animation-name: blink;
+    animation-duration: 1.5s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+@keyframes blink {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 1;
+    }
 }

@@ -17,6 +17,7 @@
     "modules-right": [
         "idle_inhibitor",
 		"custom/openvpn",
+		"custom/screen-recorder",
         "network",
         "power-profiles-daemon",
         "cpu",
@@ -190,6 +191,12 @@
 	    "return-type": "json",
 	    "tooltip": true,
 	    "format": "{}" 
-    }
-    
+    },
+	"custom/screen-recorder": {
+	    "exec": "$HOME/.config/waybar/scripts/screen-recorder.sh status",
+		"on-click": "$HOME/.config/waybar/scripts/screen-recorder.sh toggle",
+		"interval": 1,
+		"format": {},
+		"return-type": "json"
+	}
 }

@@ -26,8 +26,8 @@ set $menu "wofi --show drun"
 font pango:Noto Sans Mono 13px 
 
 ### Output configuration
-#set $wallpaper ~/Pictures/wallpapers/cafe.jpg
-set $wallpaper ~/Pictures/background-green-forrest.jpg 
+set $wallpaper ~/Pictures/wallpapers/cafe.jpg
+#set $wallpaper ~/Pictures/background-green-forrest.jpg 
 output * bg $wallpaper fill
 
 # Work
@@ -245,7 +245,8 @@ bindsym $mod+r mode "resize"
     bindsym --locked XF86MonBrightnessUp exec brightnessctl set 5%+
     # Screenshots
     # bindsym Print exec --no-startup-id flameshot gui
-    bindsym Print exec --no-startup-id ~/.config/sway/screenshot.sh ~/Pictures/screenshots
+    bindsym Print exec --no-startup-id ~/.config/waybar/scripts/screenshot.sh ~/Pictures/screenshots
+    bindsym Shift+Print exec --no-startup-id ~/.config/waybar/scripts/screen-recorder.sh toggle ~/Videos/screen-recordings 
 
 # Colors
 
