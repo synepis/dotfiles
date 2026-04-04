@@ -2,7 +2,7 @@ vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
 vim.g.have_nerd_font = true
---
+
 -- [[ Basic options ]] --
 vim.o.tabstop = 4
 vim.o.shiftwidth = 4
@@ -15,6 +15,22 @@ vim.o.mouse = "a"
 vim.o.showmode = false
 vim.o.undofile = true
 vim.o.signcolumn = "yes"
+
+function _G.custom_winbar()
+	local filename = vim.fn.expand("%:t")
+	local modified = vim.bo.modified and "[+]" or ""
+
+	local hl = ""
+	if vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin) then
+		hl = "%#StatulLine#"
+	else
+		hl = "%#StatusLineNC#"
+	end
+
+	return hl .. " %f" .. modified .. "%*" -- %t is filename, %* resets the highlight
+end
+
+vim.opt.winbar = "%{%v:lua.custom_winbar()%}"
 
 -- Case-insensitive searching UNLESS \C or one or more capital letters in the search term
 vim.o.ignorecase = true
@@ -38,7 +54,6 @@ vim.schedule(function()
 end)
 
 -- [[ Basic Keymaps ]]
-
 -- Clear highlights on search when pressing <Esc> in normal mode
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 
@@ -71,7 +86,101 @@ vim.keymap.set("v", "<", "<gv")
 vim.keymap.set({ "n", "v" }, "<leader>q", ":q<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>Q", ":q!<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>ww", ":w<CR>")
+vim.keymap.set({ "n", "v" }, "<leader>wa", ":wa<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>wq", ":wq<CR>")
+
+-- -- Special quit (by default close buffers, if last buffer then quit)
+-- vim.keymap.set({ "n", "v" }, "<leader>q", function()
+-- 	-- Count how many windows are open in the current tab
+-- 	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+--
+-- 	if #tab_wins > 1 then
+-- 		local win = vim.api.nvim_get_current_win()
+-- 		print("Branch1")
+-- 		vim.api.nvim_win_close(win, false)
+-- 	else
+-- 		print("Branch2")
+-- 		local listed_buffers = vim.fn.getbufinfo({ buflisted = 1 })
+-- 		print(vim.inspect(listed_buffers))
+-- 		if #listed_buffers > 1 then
+-- 			vim.cmd("bdelete")
+-- 		else
+-- 			vim.cmd("quit")
+-- 		end
+-- 	end
+-- end, { desc = "Close buffer" })
+
+-- Ensure pasting doesn't replace the clipboard
+vim.keymap.set("x", "p", [["_dP]])
+
+-- More natual re-do
+vim.keymap.set("n", "U", "<C-r>")
+
+-- Window resizing
+local function resize_mode()
+	print("-- Window Resize Active -- ")
+
+	local winnr = vim.fn.winnr()
+	local windows = vim.api.nvim_list_wins()
+	local is_last_col = vim.fn.winnr("l") == winnr and #windows > 1
+	local is_last_row = vim.fn.winnr("j") == winnr and #windows > 1
+
+	while true do
+		local char = vim.fn.getchar()
+		local key = vim.fn.nr2char(char)
+
+		if key == "h" then
+			if is_last_col then
+				vim.cmd("vertical resize +2")
+			else
+				vim.cmd("vertical resize -2")
+			end
+		elseif key == "l" then
+			if is_last_col then
+				vim.cmd("vertical resize -2")
+			else
+				vim.cmd("vertical resize +2")
+			end
+		elseif key == "j" then
+			if is_last_row then
+				vim.cmd("resize -2")
+			else
+				vim.cmd("resize +2")
+			end
+		elseif key == "k" then
+			if is_last_row then
+				vim.cmd("resize +2")
+			else
+				vim.cmd("resize -2")
+			end
+		else
+			print("-- Widow Resize Stopped --")
+			break
+		end
+		vim.cmd("redraw")
+	end
+end
+
+vim.keymap.set("n", "<leader>wr", resize_mode, { desc = "Enter window resizing mode" })
+
+-- Project Build Release
+vim.keymap.set(
+	"n",
+	"<leader>pB",
+	":!cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build\n",
+	{ desc = "[P]project [B]uild Release" }
+)
+
+-- Project Build Debug
+vim.keymap.set(
+	"n",
+	"<leader>pb",
+	":!cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build\n",
+	{ desc = "[P]project [B]uild Debug" }
+)
+
+-- Diagnostics
+vim.keymap.set("n", "<leader>wd", vim.diagnostic.setqflist, { desc = "Open [W]indow [D]iagnostics" })
 
 -- [[ Basic Autocommands ]]
 
@@ -81,6 +190,26 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 	group = vim.api.nvim_create_augroup("kickstart-highlight-yank", { clear = true }),
 	callback = function()
 		vim.hl.on_yank()
+	end,
+})
+
+-- Automatically set the root dir when starting vim.
+-- Try to find any "root" type directory,
+-- otherwise  set it to the opened buffer directory
+vim.api.nvim_create_autocmd("VimEnter", {
+	callback = function()
+		local bufname = vim.api.nvim_buf_get_name(0)
+		local bufdir = ""
+		if vim.uv.fs_stat(bufname).type == "directory" then
+			bufdir = bufname
+		else
+			bufdir = vim.fs.dirname(bufname)
+		end
+
+		local rootdirs = vim.fs.find({ ".git", ".nvim" }, { path = bufdir, type = "directory", upward = true })
+		local rootdir = vim.fs.dirname(rootdirs[1]) or bufdir
+
+		vim.fn.chdir(rootdir)
 	end,
 })
 
@@ -182,6 +311,7 @@ require("lazy").setup({
 		},
 		config = function()
 			-- [[ Configure Telescope ]]
+			local actions = require("telescope.actions")
 			require("telescope").setup({
 				-- You can put your default mappings / updates / etc. in here
 				--  All the info you're looking for is in `:help telescope.setup()`
@@ -192,6 +322,32 @@ require("lazy").setup({
 				--   },
 				-- },
 				-- pickers = {}
+				defaults = {
+					layout_strategy = "vertical",
+					mappings = {
+						i = { ["<S-CR>"] = actions.select_vertical },
+						i = { ["<S-CR>"] = actions.select_vertical },
+					},
+					layout_config = {
+						vertical = {
+							mirror = true,
+							prompt_position = "top",
+						},
+						width = 0.8,
+						height = 0.9,
+						preview_cutoff = 1,
+					},
+					sorting_strategy = "ascending",
+					file_ignore_patterns = {
+						"%.git/",
+						"node_modules/",
+					},
+				},
+				pickers = {
+					find_files = {
+						hidden = true,
+					},
+				},
 				extensions = {
 					["ui-select"] = {
 						require("telescope.themes").get_dropdown(),
@@ -313,27 +469,27 @@ require("lazy").setup({
 
 					-- Rename the variable under your cursor.
 					--  Most Language Servers support renaming across files, etc.
-					map("grn", vim.lsp.buf.rename, "[R]e[n]ame")
+					map("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
 
 					-- Execute a code action, usually your cursor needs to be on top of an error
 					-- or a suggestion from your LSP for this to activate.
 					map("gra", vim.lsp.buf.code_action, "[G]oto Code [A]ction", { "n", "x" })
 
-					-- Find references for the word under your cursor.
-					map("grr", require("telescope.builtin").lsp_references, "[G]oto [R]eferences")
+					-- Find references for the word under your cursor. (Find usages)
+					map("<leader>fu", require("telescope.builtin").lsp_references, "[F]ind [U]sages")
 
 					-- Jump to the implementation of the word under your cursor.
 					--  Useful when your language has ways of declaring types without an actual implementation.
-					map("gri", require("telescope.builtin").lsp_implementations, "[G]oto [I]mplementation")
+					map("gi", require("telescope.builtin").lsp_implementations, "[G]oto [I]mplementation")
 
 					-- Jump to the definition of the word under your cursor.
 					--  This is where a variable was first declared, or where a function is defined, etc.
 					--  To jump back, press <C-t>.
-					map("grd", require("telescope.builtin").lsp_definitions, "[G]oto [D]efinition")
+					map("gd", require("telescope.builtin").lsp_definitions, "[G]oto [D]efinition")
 
 					-- WARN: This is not Goto Definition, this is Goto Declaration.
 					--  For example, in C this would take you to the header.
-					map("grD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
+					map("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
 
 					-- Fuzzy find all the symbols in your current document.
 					--  Symbols are things like variables, functions, types, etc.
@@ -346,7 +502,10 @@ require("lazy").setup({
 					-- Jump to the type of the word under your cursor.
 					--  Useful when you're not sure what type a variable is and you want to see
 					--  the definition of its *type*, not where it was *defined*.
-					map("grt", require("telescope.builtin").lsp_type_definitions, "[G]oto [T]ype Definition")
+					map("gt", require("telescope.builtin").lsp_type_definitions, "[G]oto [T]ype Definition")
+
+					-- Help/documentation for the current line
+					map("gh", vim.lsp.buf.signature_help, "[G]oto [H]elp")
 
 					-- This function resolves a difference between neovim nightly (version 0.11) and stable (version 0.10)
 					---@param client vim.lsp.Client
@@ -458,8 +617,16 @@ require("lazy").setup({
 			--  - settings (table): Override the default settings passed when initializing the server.
 			--        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
 			local servers = {
-				-- clangd = {},
-				-- gopls = {},
+				clangd = {
+					cmd = {
+						"clangd",
+						"--clang-tidy",
+						"--compile-commands-dir=build",
+						"--background-index",
+						"--header-insertion=iwyu",
+					},
+				},
+				gopls = {},
 				-- pyright = {},
 				-- rust_analyzer = {},
 				-- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
@@ -643,28 +810,43 @@ require("lazy").setup({
 		},
 	},
 
-	{ -- You can easily change to a different colorscheme.
-		-- Change the name of the colorscheme plugin below, and then
-		-- change the command in the config to whatever the name of that colorscheme is.
-		--
-		-- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-		"folke/tokyonight.nvim",
+	-- { -- You can easily change to a different colorscheme.
+	-- 	-- Change the name of the colorscheme plugin below, and then
+	-- 	-- change the command in the config to whatever the name of that colorscheme is.
+	-- 	--
+	-- 	-- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
+	-- 	"folke/tokyonight.nvim",
+	-- 	priority = 1000, -- Make sure to load this before all the other start plugins.
+	-- 	config = function()
+	-- 		---@diagnostic disable-next-line: missing-fields
+	-- 		require("tokyonight").setup({
+	-- 			styles = {
+	-- 				comments = { italic = false }, -- Disable italics in comments
+	-- 			},
+	-- 		})
+	--
+	-- 		-- Load the colorscheme here.
+	-- 		-- Like many other themes, this one has different styles, and you could load
+	-- 		-- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
+	-- 		vim.cmd.colorscheme("tokyonight-night")
+	-- 	end,
+	-- },
+	{
+		"rebelot/kanagawa.nvim",
 		priority = 1000, -- Make sure to load this before all the other start plugins.
 		config = function()
-			---@diagnostic disable-next-line: missing-fields
-			require("tokyonight").setup({
-				styles = {
-					comments = { italic = false }, -- Disable italics in comments
-				},
-			})
-
-			-- Load the colorscheme here.
-			-- Like many other themes, this one has different styles, and you could load
-			-- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-			vim.cmd.colorscheme("tokyonight-night")
+			require("kanagawa").setup()
+			vim.cmd.colorscheme("kanagawa")
 		end,
 	},
-
+	-- {
+	-- 	"sainnhe/gruvbox-material",
+	-- 	priority = 1000, -- Make sure to load this before all the other start plugins.
+	-- 	config = function()
+	-- 		vim.g.gruvbox_material_enable_italic = true
+	-- 		vim.cmd.colorscheme("gruvbox-material")
+	-- 	end,
+	-- },
 	-- Highlight todo, notes, etc in comments
 	{
 		"folke/todo-comments.nvim",
@@ -748,6 +930,74 @@ require("lazy").setup({
 		--    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
 	},
 	{
+		"mfussenegger/nvim-dap",
+		dependencies = {
+			"rcarriga/nvim-dap-ui",
+			"nvim-neotest/nvim-nio",
+			"williamboman/mason.nvim",
+		},
+		config = function()
+			local dap = require("dap")
+			local dapui = require("dapui")
+
+			dapui.setup()
+
+			-- 1. Setup the Adapter for C/C++
+			dap.adapters.codelldb = {
+				type = "server",
+				port = "${port}",
+				executable = {
+					-- Mason installs codelldb here
+					command = vim.fn.stdpath("data") .. "/mason/bin/codelldb",
+					args = { "--port", "${port}" },
+				},
+			}
+
+			-- 2. Setup the Configuration for C
+			dap.configurations.c = {
+				{
+					name = "Launch Debug Build",
+					type = "codelldb",
+					request = "launch",
+					-- This looks for your executable in the build folder automatically
+					program = function()
+						local path = vim.fn.getcwd() .. "/build/my_program"
+						if vim.fn.executable(path) == 1 then
+							return path
+						else
+							return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/build/", "file")
+						end
+					end,
+					cwd = "${workspaceFolder}",
+					stopOnEntry = false,
+				},
+			}
+
+			-- Support C++ by copying the C config
+			dap.configurations.cpp = dap.configurations.c
+
+			-- 3. Automatic UI toggling
+			dap.listeners.after.event_initialized["dapui_config"] = dapui.open
+			dap.listeners.before.event_terminated["dapui_config"] = dapui.close
+			dap.listeners.before.event_exited["dapui_config"] = dapui.close
+
+			-- 4. Keymaps (Standard Kickstart style)
+			vim.keymap.set("n", "<F5>", dap.continue, { desc = "Debug: Start/Continue" })
+			vim.keymap.set("n", "<F10>", dap.step_over, { desc = "Debug: Step Over" })
+			vim.keymap.set("n", "<F11>", dap.step_into, { desc = "Debug: Step Into" })
+			vim.keymap.set("n", "<F12>", dap.step_out, { desc = "Debug: Step Out" })
+			vim.keymap.set("n", "<leader>dp", dap.toggle_breakpoint, { desc = "[D]ebug: Toggle Break[P]oint" })
+			vim.keymap.set("n", "<leader>dq", function()
+				dap.terminate()
+				dapui.close()
+			end, { desc = "[D]ebug [Q]uit/Stop" })
+			vim.keymap.set("n", "<leader>du", dapui.toggle, { desc = "Toggle [D]ebug [U]I" })
+			vim.keymap.set("n", "<leader>dH", function()
+				require("dap.ui.widgets").hover()
+			end, { desc = "[D]ebug Hover [V]alue" })
+		end,
+	},
+	{
 		"synepis/jumper.nvim",
 		-- dir = "~/git/jumper.nvim/",
 		config = function()
@@ -757,6 +1007,20 @@ require("lazy").setup({
 			vim.keymap.set({ "n", "v" }, ";", function()
 				jumper.interactive_search()
 			end)
+		end,
+	},
+	{
+		dir = "~/git/bookmarks.nvim/",
+		config = function()
+			require("bookmarks").setup()
+
+			vim.keymap.set({ "n", "v" }, "ml", function()
+				require("bookmarks").show_bookmarks()
+			end, { desc = "[M]arks [L]ist" })
+
+			vim.keymap.set({ "n", "v" }, "mm", function()
+				require("bookmarks").toggle_bookmark()
+			end, { desc = "[M]arks [M]ark (Toggle)" })
 		end,
 	},
 	-- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
@@ -771,7 +1035,7 @@ require("lazy").setup({
 	-- require 'kickstart.plugins.debug',
 	-- require 'kickstart.plugins.indent_line',
 	-- require 'kickstart.plugins.lint',
-	-- require 'kickstart.plugins.autopairs',
+	require("kickstart.plugins.autopairs"),
 	-- require 'kickstart.plugins.neo-tree',
 	-- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
