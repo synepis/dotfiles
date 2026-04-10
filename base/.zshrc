@@ -118,6 +118,10 @@ alias gco="git checkout"
 alias dup="docker-compose up"
 alias ddown="docker-compose down -v"
 
+# Samba drive
+alias samba-on="sudo systemctl start smb nmb"
+alias samba-off="sudo systemctl stop smb nmb"
+
 # Golang
 export PATH=$PATH:/usr/local/go/bin
 

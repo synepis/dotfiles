@@ -15,6 +15,7 @@ vim.o.mouse = "a"
 vim.o.showmode = false
 vim.o.undofile = true
 vim.o.signcolumn = "yes"
+vim.o.winborder = "rounded"
 
 function _G.custom_winbar()
 	local filename = vim.fn.expand("%:t")
@@ -54,11 +55,15 @@ vim.schedule(function()
 end)
 
 -- [[ Basic Keymaps ]]
+
 -- Clear highlights on search when pressing <Esc> in normal mode
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 
 -- Easier escape
 vim.keymap.set("i", "jk", "<Esc>", { noremap = true, silent = true })
+
+-- Easier escape from terminal mode
+vim.keymap.set("t", "<Esc> ", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
 
 -- Navigation.
 vim.keymap.set({ "n", "v", "o" }, "H", "0", { noremap = true, silent = true })
@@ -89,6 +94,9 @@ vim.keymap.set({ "n", "v" }, "<leader>ww", ":w<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>wa", ":wa<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>wq", ":wq<CR>")
 
+-- Switch between alternate buffers (two most recent)
+vim.keymap.set({ "n", "v" }, "<leader>wa", ":wq<CR>")
+
 -- -- Special quit (by default close buffers, if last buffer then quit)
 -- vim.keymap.set({ "n", "v" }, "<leader>q", function()
 -- 	-- Count how many windows are open in the current tab
@@ -115,6 +123,9 @@ vim.keymap.set("x", "p", [["_dP]])
 
 -- More natual re-do
 vim.keymap.set("n", "U", "<C-r>")
+
+-- Windows exchange/swap
+vim.keymap.set({ "n", "v" }, "<leader>wx", "<C-w>x")
 
 -- Window resizing
 local function resize_mode()
@@ -179,6 +190,20 @@ vim.keymap.set(
 	{ desc = "[P]project [B]uild Debug" }
 )
 
+-- File Explorer
+vim.g.loaded_netrw = 1 -- disble netrw since we use nvim-tree below
+vim.g.loaded_netrwPlugin = 1
+
+-- vim.keymap.set("n", "<leader>we", vim.cmd.Lexplore, { desc = "Open [W]indow [E]xplorer", silent = true })
+-- vim.keymap.set("n", "<leader>fe", function()
+-- 	local current_file = vim.fn.expand("%:t")
+-- 	local current_dir = vim.fn.expand("%:p:h")
+-- 	vim.cmd("Lexplore " .. current_dir)
+-- 	pcall(function()
+-- 		vim.fn.search("\\<" .. current_file)
+-- 	end)
+-- end, { desc = "[F]ind in [E]xplorer" })
+
 -- Diagnostics
 vim.keymap.set("n", "<leader>wd", vim.diagnostic.setqflist, { desc = "Open [W]indow [D]iagnostics" })
 
@@ -193,6 +218,27 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 	end,
 })
 
+-- Automatic split resize on OS window resize
+vim.api.nvim_create_autocmd("VimResized", {
+	command = "wincmd =",
+})
+
+-- Show cursor line only in active window [enable]
+vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter" }, {
+	group = vim.api.nvim_create_augroup("active_cursorline", { clear = true }),
+	callback = function()
+		vim.opt_local.cursorline = true
+	end,
+})
+
+-- Show cursor line only in active window [disable]
+vim.api.nvim_create_autocmd({ "WinLeave", "BufLeave" }, {
+	group = "active_cursorline",
+	callback = function()
+		vim.opt_local.cursorline = false
+	end,
+})
+
 -- Automatically set the root dir when starting vim.
 -- Try to find any "root" type directory,
 -- otherwise  set it to the opened buffer directory
@@ -200,6 +246,8 @@ vim.api.nvim_create_autocmd("VimEnter", {
 	callback = function()
 		local bufname = vim.api.nvim_buf_get_name(0)
 		local bufdir = ""
+		print(bufname)
+		print(vim.inspect(vim.uv.fs_stat(bufname)))
 		if vim.uv.fs_stat(bufname).type == "directory" then
 			bufdir = bufname
 		else
@@ -341,6 +389,8 @@ require("lazy").setup({
 					file_ignore_patterns = {
 						"%.git/",
 						"node_modules/",
+						"zig%-cache/",
+						"zig%-out/",
 					},
 				},
 				pickers = {
@@ -505,7 +555,10 @@ require("lazy").setup({
 					map("gt", require("telescope.builtin").lsp_type_definitions, "[G]oto [T]ype Definition")
 
 					-- Help/documentation for the current line
-					map("gh", vim.lsp.buf.signature_help, "[G]oto [H]elp")
+					map("gh", vim.lsp.buf.hover, "[G]oto [H]over")
+
+					-- Signature help
+					map("gH", vim.lsp.buf.signature_help, "[G]oto signature [H]elp")
 
 					-- This function resolves a difference between neovim nightly (version 0.11) and stable (version 0.10)
 					---@param client vim.lsp.Client
@@ -626,6 +679,15 @@ require("lazy").setup({
 						"--header-insertion=iwyu",
 					},
 				},
+				zls = {
+					settings = {
+						zls = {
+							zig_exe_path = "/usr/bin/zig",
+							enable_snippets = true,
+							warn_style = true,
+						},
+					},
+				},
 				gopls = {},
 				-- pyright = {},
 				-- rust_analyzer = {},
@@ -689,7 +751,6 @@ require("lazy").setup({
 			})
 		end,
 	},
-
 	{ -- Autoformat
 		"stevearc/conform.nvim",
 		event = { "BufWritePre" },
@@ -730,7 +791,6 @@ require("lazy").setup({
 			},
 		},
 	},
-
 	{ -- Autocompletion
 		"saghen/blink.cmp",
 		event = "VimEnter",
@@ -910,6 +970,7 @@ require("lazy").setup({
 				"query",
 				"vim",
 				"vimdoc",
+				"zig",
 			},
 			-- Autoinstall languages that are not installed
 			auto_install = true,
@@ -995,6 +1056,56 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>dH", function()
 				require("dap.ui.widgets").hover()
 			end, { desc = "[D]ebug Hover [V]alue" })
+		end,
+	},
+	{
+		"nvim-tree/nvim-tree.lua",
+		dependencies = { "nvim-tree/nvim-web-devicons" },
+		config = function()
+			require("nvim-tree").setup({
+				-- Disables netrw (built-in explorer) to avoid conflicts
+				disable_netrw = true,
+				hijack_netrw = true,
+
+				-- Better visual experience
+				view = {
+					width = 35,
+					relativenumber = true, -- Great for jumping around with 5j, 10k
+				},
+				renderer = {
+					group_empty = true,
+					highlight_opened_files = "all",
+				},
+				filters = {
+					dotfiles = false, -- Set to true if you want to hide .gitignore, .ds_store, etc.
+				},
+			})
+
+			-- Toggle the tree: <leader>e (e for Explorer)
+			vim.keymap.set("n", "<leader>we", ":NvimTreeToggle<CR>", { desc = "[W]indow [E]xplorer Toggle" })
+
+			-- Focus the tree: <leader>ef (e for explorer, f for focus)
+			-- Useful if you're in a file and want to jump back to the tree without toggling it
+			vim.keymap.set("n", "<leader>fe", ":NvimTreeFindFile<CR>", { desc = "[F]ind in [E]" })
+		end,
+	},
+	{
+		"akinsho/toggleterm.nvim",
+		config = function()
+			require("toggleterm").setup({
+				size = 20,
+				hide_numbers = true,
+				start_in_insert = true,
+				direction = "float",
+				persist_size = true,
+				float_opts = {
+					border = "curved",
+					winblend = 3,
+				},
+			})
+			local opts = { noremap = true, silent = true }
+			vim.keymap.set("n", "<leader>wt", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
+			vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
 		end,
 	},
 	{

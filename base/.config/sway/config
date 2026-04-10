@@ -278,8 +278,8 @@ bindsym $mod+space mode "leader"
 
 # Keyboard layouts
 mode "keyboard_mode" {
-	bindsym e exec "setxkbmap us", mode "default"
-	bindsym h exec "setxkbmap hr", mode "default"
+    bindsym e exec swaymsg input "type:keyboard" xkb_layout "us", mode "default"
+    bindsym h exec swaymsg input "type:keyboard" xkb_layout "hr", mode "default"
 
 	bindsym Return mode "default"
 	bindsym Escape mode "default"
