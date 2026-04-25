@@ -125,6 +125,9 @@ alias samba-off="sudo systemctl stop smb nmb"
 # Golang
 export PATH=$PATH:/usr/local/go/bin
 
+# Zig
+export PATH=$PATH:"$HOME/sdk/zig-x86_64-linux-0.16.0/"
+
 # Custom for this computer
 # source ~/.zshrc_local
 

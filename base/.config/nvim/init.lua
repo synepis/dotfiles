@@ -63,11 +63,16 @@ vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 vim.keymap.set("i", "jk", "<Esc>", { noremap = true, silent = true })
 
 -- Easier escape from terminal mode
-vim.keymap.set("t", "<Esc> ", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
+vim.keymap.set("t", "<Space><Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
 
 -- Navigation.
 vim.keymap.set({ "n", "v", "o" }, "H", "0", { noremap = true, silent = true })
 vim.keymap.set({ "n", "v", "o" }, "L", "$", { noremap = true, silent = true })
+vim.keymap.set({ "n", "v", "o" }, "J", "<C-d>", { noremap = true, silent = true })
+vim.keymap.set({ "n", "v", "o" }, "K", "<C-u>", { noremap = true, silent = true })
+
+-- Remap joining lines (due to navigation using J)
+vim.keymap.set({ "n", "v", "o" }, "M", "J", { noremap = true, silent = true })
 
 -- Mouse horizontal scroll
 vim.keymap.set("n", "<S-ScrollWheelDown>", "3zl", { noremap = true, silent = true })
@@ -95,7 +100,7 @@ vim.keymap.set({ "n", "v" }, "<leader>wa", ":wa<CR>")
 vim.keymap.set({ "n", "v" }, "<leader>wq", ":wq<CR>")
 
 -- Switch between alternate buffers (two most recent)
-vim.keymap.set({ "n", "v" }, "<leader>wa", ":wq<CR>")
+vim.keymap.set({ "n", "v" }, "<leader>a", "<C-^>")
 
 -- -- Special quit (by default close buffers, if last buffer then quit)
 -- vim.keymap.set({ "n", "v" }, "<leader>q", function()
@@ -239,27 +244,36 @@ vim.api.nvim_create_autocmd({ "WinLeave", "BufLeave" }, {
 	end,
 })
 
+-- Force a blinking bar cursor in terminal insert mode
+vim.api.nvim_create_autocmd("TermEnter", {
+	pattern = "term://*",
+	callback = function()
+		vim.opt_local.guicursor =
+			"n-v-c-sm:block,i-ci-ve:ver25-blinkwait300-blinkoff200-blinkon250-Cursor/lCursor,r-cr-o:hor20"
+	end,
+})
+
 -- Automatically set the root dir when starting vim.
 -- Try to find any "root" type directory,
 -- otherwise  set it to the opened buffer directory
-vim.api.nvim_create_autocmd("VimEnter", {
-	callback = function()
-		local bufname = vim.api.nvim_buf_get_name(0)
-		local bufdir = ""
-		print(bufname)
-		print(vim.inspect(vim.uv.fs_stat(bufname)))
-		if vim.uv.fs_stat(bufname).type == "directory" then
-			bufdir = bufname
-		else
-			bufdir = vim.fs.dirname(bufname)
-		end
-
-		local rootdirs = vim.fs.find({ ".git", ".nvim" }, { path = bufdir, type = "directory", upward = true })
-		local rootdir = vim.fs.dirname(rootdirs[1]) or bufdir
-
-		vim.fn.chdir(rootdir)
-	end,
-})
+-- vim.api.nvim_create_autocmd("VimEnter", {
+-- 	callback = function()
+-- 		local bufname = vim.api.nvim_buf_get_name(0)
+-- 		local bufdir = ""
+-- 		print(bufname)
+-- 		print(vim.inspect(vim.uv.fs_stat(bufname)))
+-- 		if vim.uv.fs_stat(bufname).type == "directory" then
+-- 			bufdir = bufname
+-- 		else
+-- 			bufdir = vim.fs.dirname(bufname)
+-- 		end
+--
+-- 		local rootdirs = vim.fs.find({ ".git", ".nvim" }, { path = bufdir, type = "directory", upward = true })
+-- 		local rootdir = vim.fs.dirname(rootdirs[1]) or bufdir
+--
+-- 		vim.fn.chdir(rootdir)
+-- 	end,
+-- })
 
 -- [[ lazy.nvim ]] --
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
@@ -374,7 +388,7 @@ require("lazy").setup({
 					layout_strategy = "vertical",
 					mappings = {
 						i = { ["<S-CR>"] = actions.select_vertical },
-						i = { ["<S-CR>"] = actions.select_vertical },
+						n = { ["<S-CR>"] = actions.select_vertical },
 					},
 					layout_config = {
 						vertical = {
@@ -1037,6 +1051,18 @@ require("lazy").setup({
 			-- Support C++ by copying the C config
 			dap.configurations.cpp = dap.configurations.c
 
+			dap.adapters.go = function(callback, config)
+				-- This starts 'dlv' in DAP mode automatically when you start debugging
+				callback({
+					type = "server",
+					port = "${port}",
+					executable = {
+						command = "dlv",
+						args = { "dap", "-l", "127.0.0.1:${port}" },
+					},
+				})
+			end
+
 			-- 3. Automatic UI toggling
 			dap.listeners.after.event_initialized["dapui_config"] = dapui.open
 			dap.listeners.before.event_terminated["dapui_config"] = dapui.close
@@ -1079,6 +1105,11 @@ require("lazy").setup({
 				filters = {
 					dotfiles = false, -- Set to true if you want to hide .gitignore, .ds_store, etc.
 				},
+				actions = {
+					open_file = {
+						resize_window = false,
+					},
+				},
 			})
 
 			-- Toggle the tree: <leader>e (e for Explorer)
@@ -1089,25 +1120,35 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>fe", ":NvimTreeFindFile<CR>", { desc = "[F]ind in [E]" })
 		end,
 	},
-	{
-		"akinsho/toggleterm.nvim",
-		config = function()
-			require("toggleterm").setup({
-				size = 20,
-				hide_numbers = true,
-				start_in_insert = true,
-				direction = "float",
-				persist_size = true,
-				float_opts = {
-					border = "curved",
-					winblend = 3,
-				},
-			})
-			local opts = { noremap = true, silent = true }
-			vim.keymap.set("n", "<leader>wt", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
-			vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
-		end,
-	},
+	-- {
+	-- 	"akinsho/toggleterm.nvim",
+	-- 	config = function()
+	-- 		require("toggleterm").setup({
+	-- 			size = 20,
+	-- 			hide_numbers = true,
+	-- 			start_in_insert = true,
+	-- 			direction = "float",
+	-- 			persist_size = true,
+	-- 			float_opts = {
+	-- 				border = "curved",
+	-- 				winblend = 3,
+	-- 			},
+	-- 			shade_terminal = false,
+	-- 			highlights = {
+	-- 				TermCursor = {
+	-- 					bg = "#FFFFFF", -- Force a bright white background
+	-- 					fg = "#000000", -- Force black text for the character under cursor
+	-- 				},
+	-- 				TermCursorNC = {
+	-- 					bg = "#444444", -- Dimmer cursor for non-focused terminal
+	-- 				},
+	-- 			},
+	-- 		})
+	-- 		local opts = { noremap = true, silent = true }
+	-- 		vim.keymap.set("n", "<leader>wt", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
+	-- 		vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>ToggleTerm<CR>", { desc = "Toggle [W]indow [T]erminal" })
+	-- 	end,
+	-- },
 	{
 		"synepis/jumper.nvim",
 		-- dir = "~/git/jumper.nvim/",
@@ -1120,20 +1161,20 @@ require("lazy").setup({
 			end)
 		end,
 	},
-	{
-		dir = "~/git/bookmarks.nvim/",
-		config = function()
-			require("bookmarks").setup()
-
-			vim.keymap.set({ "n", "v" }, "ml", function()
-				require("bookmarks").show_bookmarks()
-			end, { desc = "[M]arks [L]ist" })
-
-			vim.keymap.set({ "n", "v" }, "mm", function()
-				require("bookmarks").toggle_bookmark()
-			end, { desc = "[M]arks [M]ark (Toggle)" })
-		end,
-	},
+	-- {
+	-- 	dir = "~/git/bookmarks.nvim/",
+	-- 	config = function()
+	-- 		require("bookmarks").setup()
+	--
+	-- 		vim.keymap.set({ "n", "v" }, "ml", function()
+	-- 			require("bookmarks").show_bookmarks()
+	-- 		end, { desc = "[M]arks [L]ist" })
+	--
+	-- 		vim.keymap.set({ "n", "v" }, "mm", function()
+	-- 			require("bookmarks").toggle_bookmark()
+	-- 		end, { desc = "[M]arks [M]ark (Toggle)" })
+	-- 	end,
+	-- },
 	-- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
 	-- init.lua. If you want these files, they are in the repository, so you can just download them and
 	-- place them in the correct locations.
@@ -1182,5 +1223,31 @@ require("lazy").setup({
 	},
 })
 
--- The line beneath this is called `modeline`. See `:help modeline`
--- vim: ts=2 sts=2 sw=2 et
+-- [[ My Plugins ]]
+
+-- Bookmarks
+require("my_plugins.bookmarks").setup()
+
+vim.keymap.set("n", "ml", "<cmd>BookmarksShow<CR>", { desc = "[M]arks [L]ist" })
+vim.keymap.set("n", "mm", "<cmd>BookmarksToggle<CR>", { desc = "[M]arks [M]ark (Toggle)" })
+
+-- Floating terminal
+require("my_plugins.floaterm").setup()
+
+vim.keymap.set({ "n", "t" }, "<leader>wt", "<cmd>FloaTermToggle<CR>", { desc = "Toggle [W]indow [T]erminal" })
+vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>FloaTermToggle<CR>", { desc = "Toggle [W]indow [T]erminal" })
+vim.keymap.set({ "t" }, "<leader>q", "<cmd>close<CR>", { desc = "Quit window in terminal mode" })
+
+-- Task Runner
+require("my_plugins.runner").setup({
+	execFn = function(cmd)
+		require("my_plugins.floaterm").send_cmd_to_terminal(cmd)
+	end,
+})
+
+vim.keymap.set("n", "<leader>rs", "<cmd>RunnerSelectTask<CR>", { desc = "[R]un [S]elect task" })
+
+vim.keymap.set("n", "<leader>rr", function()
+	require("my_plugins.floaterm").send_cmd_to_terminal("zig build && ./zig-out/bin/hello")
+	-- require("my_plugins.floaterm").send_cmd_to_terminal("ls -a")
+end, {})
