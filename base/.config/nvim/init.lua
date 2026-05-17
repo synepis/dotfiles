@@ -411,6 +411,12 @@ require("lazy").setup({
 					find_files = {
 						hidden = true,
 					},
+					buffers = {
+						mappings = {
+							i = { ["<C-d>"] = actions.delete_buffer },
+							n = { ["d"] = actions.delete_buffer },
+						},
+					},
 				},
 				extensions = {
 					["ui-select"] = {
@@ -728,6 +734,8 @@ require("lazy").setup({
 						},
 					},
 				},
+				ts_ls = {},
+				html = {},
 			}
 
 			-- Ensure the servers and tools above are installed
@@ -771,7 +779,7 @@ require("lazy").setup({
 		cmd = { "ConformInfo" },
 		keys = {
 			{
-				"<leader>f",
+				"<leader>cf",
 				function()
 					require("conform").format({ async = true, lsp_format = "fallback" })
 				end,
@@ -797,11 +805,21 @@ require("lazy").setup({
 			end,
 			formatters_by_ft = {
 				lua = { "stylua" },
+				c = { "clang-format" },
+				cpp = { "clang-format" },
 				-- Conform can also run multiple formatters sequentially
 				-- python = { "isort", "black" },
 				--
 				-- You can use 'stop_after_first' to run the first available formatter from the list
 				-- javascript = { "prettierd", "prettier", stop_after_first = true },
+			},
+			formatters = {
+				["clang-format"] = {
+					prepend_args = {
+						-- Base it on LLVM (attached braces, type pointers), but force 4 spaces
+						"--style={BasedOnStyle: LLVM, IndentWidth: 4, TabWidth: 4, UseTab: Never, ColumnLimit: 100}",
+					},
+				},
 			},
 		},
 	},
@@ -975,13 +993,17 @@ require("lazy").setup({
 			ensure_installed = {
 				"bash",
 				"c",
+				"cpp",
+				"css",
 				"diff",
 				"html",
+				"javascript",
 				"lua",
 				"luadoc",
 				"markdown",
 				"markdown_inline",
 				"query",
+				"typescript",
 				"vim",
 				"vimdoc",
 				"zig",
@@ -1096,7 +1118,7 @@ require("lazy").setup({
 				-- Better visual experience
 				view = {
 					width = 35,
-					relativenumber = true, -- Great for jumping around with 5j, 10k
+					relativenumber = false, -- Great for jumping around with 5j, 10k
 				},
 				renderer = {
 					group_empty = true,
@@ -1107,8 +1129,11 @@ require("lazy").setup({
 				},
 				actions = {
 					open_file = {
-						resize_window = false,
+						resize_window = true,
 					},
+				},
+				git = {
+					ignore = false, -- Show .gitignore-d files
 				},
 			})
 
@@ -1245,9 +1270,17 @@ require("my_plugins.runner").setup({
 	end,
 })
 
-vim.keymap.set("n", "<leader>rs", "<cmd>RunnerSelectTask<CR>", { desc = "[R]un [S]elect task" })
+vim.keymap.set("n", "<leader>rs", "<cmd>RunnerSelectTask<CR>", { desc = "[R]unner [S]elect task" })
+vim.keymap.set("n", "<leader>ru", "<cmd>RunnerRunUnderCursor<CR>", { desc = "[R]unner Run [U]under cursor" })
+vim.keymap.set(
+	"n",
+	"<leader>rU",
+	"<cmd>RunnerRunUnderCursorDryRun<CR>",
+	{ desc = "[R]unner Run [U]under cursor Dry Run" }
+)
+vim.keymap.set("n", "<leader>rr", "<cmd>RunnerReloadConfig<CR>", { desc = "[R]unner [R]eload config" })
 
-vim.keymap.set("n", "<leader>rr", function()
-	require("my_plugins.floaterm").send_cmd_to_terminal("zig build && ./zig-out/bin/hello")
-	-- require("my_plugins.floaterm").send_cmd_to_terminal("ls -a")
-end, {})
+-- vim.keymap.set("n", "<leader>rr", function()
+-- 	require("my_plugins.floaterm").send_cmd_to_terminal("zig build && ./zig-out/bin/hello")
+-- 	-- require("my_plugins.floaterm").send_cmd_to_terminal("ls -a")
+-- end, {})

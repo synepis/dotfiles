@@ -5,6 +5,7 @@ local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
+local previewers = require("telescope.previewers")
 
 local ns_id = vim.api.nvim_create_namespace("bookmarks")
 
@@ -60,13 +61,14 @@ function M.toggle_bookmark()
 		local id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, row, col, {
 			sign_text = M.options.sign_text,
 			sign_hl_group = M.options.sign_hl,
+			invalidate = true,
 		})
 		local extmark = {
 			id = id,
 			bufnr = bufnr,
 			row = row,
 			col = col,
-			text = vim.api.nvim_get_current_line(),
+			text = vim.trim(vim.api.nvim_get_current_line()),
 			filename = filename,
 		}
 		table.insert(M.bookmarks, extmark)
@@ -74,6 +76,21 @@ function M.toggle_bookmark()
 end
 
 local function make_picker_entries()
+	local valid_bookmarks = {}
+	for _, mark in ipairs(M.bookmarks) do
+		local ok, details = pcall(vim.api.nvim_buf_get_extmark_by_id, mark.bufnr, ns_id, mark.id, { details = true })
+		if ok and details and #details > 0 and not details[3].invalid then
+			mark.row = details[1]
+			mark.col = details[2]
+			if vim.api.nvim_buf_is_loaded(mark.bufnr) then
+				local text = vim.api.nvim_buf_get_lines(mark.bufnr, mark.row, mark.row + 1, false)[1] or mark.text
+				mark.text = vim.trim(text)
+			end
+			table.insert(valid_bookmarks, mark)
+		end
+	end
+	M.bookmarks = valid_bookmarks
+
 	return finders.new_table({
 		results = M.bookmarks,
 		entry_maker = function(entry)
@@ -84,24 +101,52 @@ local function make_picker_entries()
 				filename = entry.filename,
 				lnum = entry.row + 1,
 				col = entry.col,
+				bufnr = entry.bufnr,
 			}
 		end,
 	})
 end
 
 function M.show_bookmarks()
-	local opts = opts or {}
 	pickers
-		.new(opts, {
+		.new({}, {
 			prompt_title = "Bookmarks",
 			finder = make_picker_entries(),
-			sorter = conf.generic_sorter(opts),
-			previewer = conf.grep_previewer({}),
+			sorter = conf.generic_sorter({}),
+			previewer = previewers.new_buffer_previewer({
+				title = "Bookmark Preview",
+				define_preview = function(self, entry, status)
+					-- 1. Get the actual current position of the extmark
+					print(vim.inspect(entry))
+					local details =
+						vim.api.nvim_buf_get_extmark_by_id(entry.bufnr, ns_id, entry.value, { details = true })
+
+					if details and #details > 0 then
+						local live_row = details[1] + 1
+
+						-- 2. Put the file in the preview buffer
+						conf.buffer_previewer_maker(entry.filename, self.state.bufnr, {
+							bufnr = self.state.bufnr,
+							winid = self.state.winid,
+						})
+
+						-- 3. Scroll the preview window to the LIVE position
+						-- vim.schedule(function()
+						-- 	if vim.api.nvim_win_is_valid(self.state.winid) then
+						-- 		vim.api.nvim_win_set_cursor(self.state.winid, { live_row, 0 })
+						-- 		-- Center the line in the preview
+						-- 		vim.api.nvim_buf_call(self.state.bufnr, function()
+						-- 			vim.cmd("normal! zz")
+						-- 		end)
+						-- 	end
+						-- end)
+					end
+				end,
+			}),
 			attach_mappings = function(prompt_bufnr, map)
 				local delete_bookmark = function()
 					local selection = action_state.get_selected_entry()
 					remove_bookmark_by_id(M.bookmarks, selection.value)
-					print("Removing: " .. vim.inspect(selection.value))
 
 					local current_picker = action_state.get_current_picker(prompt_bufnr)
 					current_picker:refresh(make_picker_entries(), { reset_prompt = true })

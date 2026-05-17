@@ -129,7 +129,7 @@ export PATH=$PATH:/usr/local/go/bin
 export PATH=$PATH:"$HOME/sdk/zig-x86_64-linux-0.16.0/"
 
 # Custom for this computer
-# source ~/.zshrc_local
+source ~/.zshrc_local
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
