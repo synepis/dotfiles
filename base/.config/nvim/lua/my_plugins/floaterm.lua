@@ -14,6 +14,77 @@ function M.setup()
 	vim.api.nvim_create_user_command("FloaTermSendCmd", function(cmd)
 		M.toggle_terminal(cmd)
 	end, {})
+
+	vim.api.nvim_create_user_command("FloaTermQuickfix", function()
+		M.yank_to_quickfix()
+	end, {})
+end
+
+function M.yank_to_quickfix()
+	if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+		vim.notify("No active terminal buffer found", vim.log.levels.WARN)
+		return
+	end
+
+	-- 1. Grab raw lines from the terminal buffer
+	local raw_lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
+	local clean_lines = {}
+
+	for _, line in ipairs(raw_lines) do
+		-- 2. STRIP ANSI ESCAPE CODES (Crucial for terminal buffers)
+		-- This deletes all the hidden color/style data so it's pure text
+		local clean = line:gsub("\27%[[0-9;]*[mK]", "")
+
+		-- Remove carriage returns that terminals love to inject (\r)
+		clean = clean:gsub("\r", "")
+
+		-- Only keep lines that aren't empty shell prompts
+		if clean:match("%S") then
+			table.insert(clean_lines, clean)
+		end
+	end
+
+	-- 3. Temporarily set the quickfix list with the cleaned text.
+	-- This forces Neovim to parse the pure text using the current 'errorformat'
+	vim.fn.setqflist({}, "r", {
+		title = "Parsed Terminal Errors",
+		lines = clean_lines,
+	})
+
+	-- 4. Filter out the "noise" entries that didn't match a real file.
+	-- When setqflist parses text, valid errors get a 'valid = 1' flag.
+	-- Junk lines (like compiler warnings or notes) get 'valid = 0'.
+	local qf_items = vim.fn.getqflist()
+	local only_errors = {}
+
+	for _, item in ipairs(qf_items) do
+		if item.valid == 1 then
+			table.insert(only_errors, item)
+		end
+	end
+
+	-- 5. Overwrite the quickfix list one last time with ONLY the valid matches
+	vim.fn.setqflist({}, "r", {
+		title = "Compiler Errors",
+		items = only_errors,
+	})
+
+	-- 6. Hand off to Telescope
+	local has_telescope, telescope = pcall(require, "telescope.builtin")
+	if has_telescope then
+		-- If the list is empty, don't open an empty picker
+		if #only_errors == 0 then
+			vim.notify("No compiler errors parsed from terminal output.", vim.log.levels.INFO)
+			return
+		end
+
+		telescope.quickfix({
+			show_line = true,
+			trim_text = true,
+		})
+	else
+		vim.cmd("copen")
+	end
 end
 
 function M.toggle_terminal()

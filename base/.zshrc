@@ -35,6 +35,9 @@ bindkey -M viins 'jk' vi-cmd-mode
 bindkey -M vicmd 'H' beginning-of-line 
 bindkey -M vicmd 'L' end-of-line 
 
+# Fix backspace in insert mode
+bindkey -M viins "^?" backward-delete-char
+
 # Use vim keys in tab complete menu:
 bindkey -M menuselect 'h' vi-backward-char
 bindkey -M menuselect 'k' vi-up-line-or-history

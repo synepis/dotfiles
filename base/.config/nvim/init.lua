@@ -438,6 +438,9 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>fo", builtin.buffers, { desc = "[F]ind [O]pen Files" })
 			vim.keymap.set("n", "<leader>fd", builtin.diagnostics, { desc = "[F]ind [D]iagnostics" })
 			vim.keymap.set("n", "<leader>f.", builtin.oldfiles, { desc = '[F]ind Recent Files ("." for repeat)' })
+			vim.keymap.set("n", "<leader>fs", function()
+				builtin.lsp_document_symbols({ symbols = { "function", "method", "class", "struct" } })
+			end, { desc = "[F]ind [D]iagnostics" })
 
 			-- Slightly advanced example of overriding default behavior and theme
 			vim.keymap.set("n", "<leader>/", function()
@@ -576,6 +579,9 @@ require("lazy").setup({
 
 					-- Help/documentation for the current line
 					map("gh", vim.lsp.buf.hover, "[G]oto [H]over")
+
+					-- Show diagnostic error
+					map("ge", vim.diagnostic.open_float, "[G]oto [E]rror")
 
 					-- Signature help
 					map("gH", vim.lsp.buf.signature_help, "[G]oto signature [H]elp")
@@ -817,6 +823,8 @@ require("lazy").setup({
 				["clang-format"] = {
 					prepend_args = {
 						-- Base it on LLVM (attached braces, type pointers), but force 4 spaces
+						-- "--style={BasedOnStyle: LLVM, IndentWidth: 4, TabWidth: 4, UseTab: Never, ColumnLimit: 100, AllowShortBlocksOnASingleLine: true, AllowShortCaseLabelsOnASingleLine: true }",
+						-- "--style={BasedOnStyle: LLVM, IndentWidth: 4, TabWidth: 4, UseTab: Never, ColumnLimit: 100, AllowShortBlocksOnASingleLine: Always, AllowShortCaseLabelsOnASingleLine: true, AlignConsecutiveDeclarations: true}",
 						"--style={BasedOnStyle: LLVM, IndentWidth: 4, TabWidth: 4, UseTab: Never, ColumnLimit: 100}",
 					},
 				},
@@ -1262,6 +1270,7 @@ require("my_plugins.floaterm").setup()
 vim.keymap.set({ "n", "t" }, "<leader>wt", "<cmd>FloaTermToggle<CR>", { desc = "Toggle [W]indow [T]erminal" })
 vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>FloaTermToggle<CR>", { desc = "Toggle [W]indow [T]erminal" })
 vim.keymap.set({ "t" }, "<leader>q", "<cmd>close<CR>", { desc = "Quit window in terminal mode" })
+vim.keymap.set({ "n" }, "<leader>fq", "<cmd>FloaTermQuickfix<CR>", { desc = "[F]ind [Q]uickfix" })
 
 -- Task Runner
 require("my_plugins.runner").setup({

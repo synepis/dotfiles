@@ -117,7 +117,7 @@ function M.show_bookmarks()
 				title = "Bookmark Preview",
 				define_preview = function(self, entry, status)
 					-- 1. Get the actual current position of the extmark
-					print(vim.inspect(entry))
+					-- print(vim.inspect(entry))
 					local details =
 						vim.api.nvim_buf_get_extmark_by_id(entry.bufnr, ns_id, entry.value, { details = true })
 
