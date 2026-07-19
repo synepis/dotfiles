@@ -11,6 +11,8 @@ local function debug_log(msg)
 	end
 end
 
+local has_devicons, devicons = pcall(require, "nvim-web-devicons")
+
 local lsp_kind_icons = {
 	[1] = "󰈔", -- File
 	[2] = "", -- Module
@@ -49,14 +51,14 @@ local PickerMode = {
 
 ---@enum InputPosition
 local InputPosition = {
-	NONE = nil,
+	NONE = "NONE",
 	TOP = "TOP",
 	BOTTOM = "BOTTOM",
 }
 
 ---@enum PreviewPosition
 local PreviewPosition = {
-	NONE = nil,
+	NONE = "NONE",
 	TOP = "TOP",
 	BOTTOM = "BOTTOM",
 	LEFT = "LEFT",
@@ -69,21 +71,18 @@ local PreviewPosition = {
 ---@field width? number Width as a percentage of the window height in [0..1] range
 ---@field height? number Height as a percentage of the window height in [0..1] range
 
----@class Highlight
+---@class PickerHighlight
 ---@field start_col integer
 ---@field end_col integer
 
----@class PickerLabel
----@field text string Label text to show
----@field highlights Highlight[] List of label highlights
-
----@class PickerOption
+---@class PickerItem
 ---@field key string Unique value which gets returned if the selection is accpted
----@field label PickerLabel Value to be shown in the options pane
----@field filename? string Present if this option is a file
----@field bufnr? integer Present if this option is a buffer
----@field row? integer Row or line number, present if this option is a buffer or a file
----@field col? integer Present if this option is a buffer or a file
+---@field label string Label text to be shown
+---@field highlights PickerHighlight[] List of highlights for the label text
+---@field filename? string Present if this item is a file
+---@field bufnr? integer Present if this item is a buffer
+---@field row? integer Row or line number, present if this item is a buffer or a file
+---@field col? integer Present if this item is a buffer or a file
 
 local state = {
 	namespace = vim.api.nvim_create_namespace("picker"),
@@ -91,8 +90,10 @@ local state = {
 
 	is_open = false,
 	mode = nil,
-	options = nil, -- All available options
-	results = nil, -- Filtered options
+	pipeline = nil,
+
+	items = nil, -- All available items
+	results = nil, -- Filtered items to be shown in the results window
 
 	selected_idx = nil, -- Index inside results (1 - based)
 	selected_hl_mark = nil,
@@ -200,7 +201,7 @@ local function close_picker()
 
 	state.is_open = false
 	state.mode = nil
-	state.options = nil
+	state.items = nil
 	state.results = nil
 
 	if state.input_win and vim.api.nvim_win_is_valid(state.input_win) then
@@ -213,6 +214,10 @@ local function close_picker()
 	if state.preview_win and vim.api.nvim_win_is_valid(state.preview_win) then
 		vim.api.nvim_win_close(state.preview_win, true)
 	end
+
+	vim.api.nvim_buf_delete(state.input_buf, { force = true })
+	vim.api.nvim_buf_delete(state.results_buf, { force = true })
+	vim.api.nvim_buf_delete(state.preview_buf, { force = true })
 
 	state.input_buf = nil
 	state.input_win = nil
@@ -313,7 +318,7 @@ local function init_windows(mode, input_position, preview_position)
 		col = results_col,
 		width = results_width - (2 * border_width),
 		height = results_height - (2 * border_width),
-		title = "Results",
+		title = input_row ~= nil and "Results" or state.prompt,
 		title_pos = "center",
 		relative = "editor",
 		style = "minimal",
@@ -327,7 +332,7 @@ local function init_windows(mode, input_position, preview_position)
 			width = input_width - (2 * border_width),
 			height = input_height - (2 * border_width),
 			relative = "editor",
-			title = "Find " .. mode,
+			title = state.prompt or "Input",
 			title_pos = "center",
 			style = "minimal",
 			border = "rounded",
@@ -358,7 +363,6 @@ local function get_buf_icon(bufnr)
 		return "📄", "Default"
 	end
 
-	local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 	if has_devicons then
 		local icon, hl_group = devicons.get_icon_by_filetype(ft, { default = "true" })
 		return icon, hl_group
@@ -379,11 +383,11 @@ local function get_file_icon(filepath)
 	return icon, hl_group
 end
 
----Formats a single PickerOption into a string and returns highlight coordinates
----@param option PickerOption
+---Formats a single PickerItem into a string and returns highlight coordinates
+---@param item PickerItem
 ---@return string formatted_line The text to insert into the buffer
 ---@return table highlights A list of highlight definitions
-local function format_option(option, opts)
+local function format_item(item, opts)
 	local chunks = {}
 	local highlights = {}
 	local current_len = 0
@@ -398,21 +402,21 @@ local function format_option(option, opts)
 		current_len = current_len + #text
 	end
 
-	if option.filename then
-		local icon, icon_hl = get_file_icon(option.filename)
+	if item.filename then
+		local icon, icon_hl = get_file_icon(item.filename)
 		append_chunk(icon .. " ", icon_hl)
-	elseif option.bufnr then
-		local icon, icon_hl = get_buf_icon(option.bufnr)
+	elseif item.bufnr then
+		local icon, icon_hl = get_buf_icon(item.bufnr)
 		append_chunk(icon .. " ", icon_hl)
 	end
 
 	local has_chunks = false
 
-	if opts.show_file and option.filename then
-		append_chunk(option.filename, "PickerFilename")
+	if opts.show_file and item.filename then
+		append_chunk(item.filename, "PickerFilename")
 		has_chunks = true
-	elseif opts.show_file and option.bufnr then
-		local full_path = vim.api.nvim_buf_get_name(option.bufnr)
+	elseif opts.show_file and item.bufnr then
+		local full_path = vim.api.nvim_buf_get_name(item.bufnr)
 		local filename = vim.fn.fnamemodify(full_path, ":.")
 		if filename == "" then
 			filename = "[No name]"
@@ -421,15 +425,15 @@ local function format_option(option, opts)
 		has_chunks = true
 	end
 
-	if opts.show_row and option.row then
+	if opts.show_row and item.row then
 		append_chunk(":", "PickerDelimiter")
-		append_chunk(tostring(option.row), "Number")
+		append_chunk(tostring(item.row), "Number")
 		has_chunks = true
 	end
 
-	if opts.show_col and option.col then
+	if opts.show_col and item.col then
 		append_chunk(":", "PickerDelimiter")
-		append_chunk(tostring(option.col), "PickerNumber")
+		append_chunk(tostring(item.col), "PickerNumber")
 		has_chunks = true
 	end
 
@@ -437,11 +441,11 @@ local function format_option(option, opts)
 		append_chunk("| ", "PickerDelimiter")
 	end
 
-	append_chunk(option.label.text, "PickerLabel")
+	append_chunk(item.label, "PickerLabel")
 
-	if option.label.highlights then
-		local label_start = current_len - #option.label.text
-		for _, hl in ipairs(option.label.highlights) do
+	if item.highlights then
+		local label_start = current_len - #item.label
+		for _, hl in ipairs(item.highlights) do
 			table.insert(highlights, {
 				hl_group = "PickerRegex",
 				start_col = label_start + hl.start_col,
@@ -479,6 +483,8 @@ local function update_selection(selected_idx)
 	end
 end
 
+local preview_count = 0
+
 local function render_preview()
 	if not state.selected_idx then
 		return
@@ -487,13 +493,18 @@ local function render_preview()
 	local selection = state.results[state.selected_idx]
 
 	if not selection then
-		vim.api.nvim_buf_set_lines(state.preview_scratch_buf, 0, -1, false, {})
 		return
 	end
+
+	preview_count = preview_count + 1
+	local local_preview_count = preview_count
 
 	if selection.filename then
 		read_file(selection.filename, function(lines)
 			vim.schedule(function()
+				if local_preview_count ~= preview_count then
+					return
+				end
 				vim.api.nvim_buf_set_lines(state.preview_buf, 0, -1, false, lines)
 				vim.api.nvim_win_set_cursor(state.preview_win, { selection.row or 1, selection.col or 0 })
 
@@ -521,7 +532,7 @@ local function render_results(results, opts)
 			local lines = {}
 			local highlights = {}
 			for _, result in ipairs(results) do
-				local line_text, line_hls = format_option(result, opts)
+				local line_text, line_hls = format_item(result, opts)
 				table.insert(lines, line_text)
 				table.insert(highlights, line_hls)
 			end
@@ -546,14 +557,14 @@ local function render_results(results, opts)
 	end)
 end
 
-local function filter_options(query)
+local function filter_items(query)
 	local filtered = {}
 
 	if query ~= "" then
 		local targets = {}
-		for i, opt in ipairs(state.options) do
+		for i, item in ipairs(state.items) do
 			table.insert(targets, {
-				text = opt.label.text,
+				text = item.label,
 				idx = i,
 			})
 		end
@@ -563,112 +574,104 @@ local function filter_options(query)
 		local matched_positions = matches[2]
 
 		for idx, target in ipairs(matched_targets) do
-			local original_opt = state.options[target.idx]
+			local original_item = state.items[target.idx]
 			local char_positions = matched_positions[idx]
 
-			local opt = vim.tbl_extend("force", {}, original_opt)
-			opt.label = vim.tbl_extend("force", {}, original_opt.label)
-			opt.label.highlights = {}
+			local item = vim.tbl_extend("force", {}, original_item)
+			item.highlights = {}
 
 			for _, pos in ipairs(char_positions) do
-				local byte_start = vim.str_byteindex(opt.label.text, "utf-32", pos)
-				local byte_end = vim.str_byteindex(opt.label.text, "utf-32", pos + 1)
+				local byte_start = vim.str_byteindex(item.label, "utf-32", pos)
+				local byte_end = vim.str_byteindex(item.label, "utf-32", pos + 1)
 
-				table.insert(opt.label.highlights, {
+				table.insert(item.highlights, {
 					start_col = byte_start,
 					end_col = byte_end,
 				})
 			end
-			table.insert(filtered, opt)
+			table.insert(filtered, item)
 		end
 	else
-		filtered = state.options
+		filtered = state.items
 	end
 
 	return filtered
 end
 
-local function fuzzy_highlight_options(query)
-	local highlighted = { unpack(state.options) } -- Shallow copy
+local function fuzzy_highlight_items(query)
+	local highlighted = { unpack(state.items) } -- Shallow copy
 
 	if query ~= "" then
 		local targets = {}
-		for i, opt in ipairs(state.options) do
+		for i, item in ipairs(state.items) do
 			table.insert(targets, {
-				text = opt.label.text,
+				label = item.label,
 				idx = i,
 			})
 		end
 
-		local matches = vim.fn.matchfuzzypos(targets, query, { key = "text" })
+		local matches = vim.fn.matchfuzzypos(targets, query, { key = "label" })
 		local matched_targets = matches[1]
 		local matched_positions = matches[2]
 
 		for idx, target in ipairs(matched_targets) do
-			local original_opt = state.options[target.idx]
+			local original_item = state.items[target.idx]
 			local char_positions = matched_positions[idx]
 
-			local opt = vim.tbl_extend("force", {}, original_opt)
-			opt.label = vim.tbl_extend("force", {}, original_opt.label)
-			opt.label.highlights = {}
+			local item = vim.tbl_extend("force", {}, original_item)
+			item.highlights = vim.tbl_extend("force", {}, original_item.highlights or {})
 
 			for _, pos in ipairs(char_positions) do
-				local byte_start = vim.str_byteindex(opt.label.text, "utf-32", pos)
-				local byte_end = vim.str_byteindex(opt.label.text, "utf-32", pos + 1)
+				local byte_start = vim.str_byteindex(item.label, "utf-32", pos)
+				local byte_end = vim.str_byteindex(item.label, "utf-32", pos + 1)
 
-				table.insert(opt.label.highlights, {
+				table.insert(item.highlights, {
 					start_col = byte_start,
 					end_col = byte_end,
 				})
 			end
-			highlighted[target.idx] = opt
+			highlighted[target.idx] = item
 		end
 	else
-		highlighted = state.options
+		highlighted = state.items
 	end
 
 	return highlighted
 end
 
+local function open_file_or_buffer(item, _)
+	if not item then
+		return
+	elseif item.filename then
+		vim.api.nvim_win_call(state.original_win, function()
+			vim.cmd("edit " .. vim.fn.fnameescape(item.filename))
+			vim.api.nvim_win_set_cursor(state.original_win, { item.row or 1, item.col or 0 })
+		end)
+	elseif item.bufnr then
+		vim.api.nvim_win_set_buf(state.original_win, item.bufnr)
+		vim.api.nvim_win_set_cursor(state.original_win, { item.row, item.col })
+	end
+end
+
 ---@class PickerPipeline
----@field find function  -- Finds the potential options
----@field filter function  -- Filter the found options
----@field render function  -- Render the resutls (filtered options)
+---@field prompt string  -- Prompt to show
+---@field find function  -- Finds the potential items
+---@field filter function  -- Filter the found items
+---@field render function  -- Render the resutls (filtered items)
+---@field on_choice function?  -- Calllback for when selection has been done
 
 ---@type table<string, PickerPipeline>
 local pipelines = {
 	ui_select = {
-		find = function() end,
-		filter = function() end,
-		render = function() end,
-	},
-	buffers = {
+		prompt = "Choose an option", -- This will usually be overidden by the caller
 		find = function(_, callback)
-			local listed_bufs = vim.api.nvim_list_bufs() -- Listed (user) buffers avoids including other non-file buffers
-			local options = {}
-			for _, bufnr in ipairs(listed_bufs) do
-				if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].buflisted then
-					local full_filename = vim.api.nvim_buf_get_name(bufnr)
-					local filename = vim.fn.fnamemodify(full_filename, ":.")
-					if filename == "" then
-						filename = "[No name]"
-					end
-					local label = string.format("%s [%d]", filename, bufnr)
-					table.insert(options, {
-						key = bufnr,
-						label = { text = label },
-						bufnr = bufnr,
-						row = 1,
-						col = 0,
-					})
-				end
-			end
-			callback(options)
+			-- Passthrough because all the items have been given when the select was invoked
+			callback(state.items)
 		end,
 		filter = function(_, query, callback)
-			callback(filter_options(query))
+			callback(filter_items(query))
 		end,
-		render = function(filtered, query)
+		render = function(filtered, _)
 			local results_opts = {
 				show_file = false,
 				show_col = false,
@@ -677,10 +680,48 @@ local pipelines = {
 			render_results(filtered, results_opts)
 		end,
 	},
+	buffers = {
+		prompt = "Find buffers",
+		find = function(_, callback)
+			local listed_bufs = vim.api.nvim_list_bufs() -- Listed (user) buffers avoids including other non-file buffers
+			local items = {}
+			for _, bufnr in ipairs(listed_bufs) do
+				if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].buflisted then
+					local full_filename = vim.api.nvim_buf_get_name(bufnr)
+					local filename = vim.fn.fnamemodify(full_filename, ":.")
+					if filename == "" then
+						filename = "[No name]"
+					end
+					local label = string.format("%s [%d]", filename, bufnr)
+					table.insert(items, {
+						key = bufnr,
+						label = label,
+						bufnr = bufnr,
+						row = 1,
+						col = 0,
+					})
+				end
+			end
+			callback(items)
+		end,
+		filter = function(_, query, callback)
+			callback(filter_items(query))
+		end,
+		render = function(filtered, _)
+			local results_opts = {
+				show_file = false,
+				show_col = false,
+				show_row = false,
+			}
+			render_results(filtered, results_opts)
+		end,
+		on_choice = open_file_or_buffer,
+	},
 	diagnostics = {
+		prompt = "Find Diagnostics",
 		find = function(_, callback)
 			local diagnostics = vim.diagnostic.get(nil)
-			local options = {}
+			local items = {}
 
 			local severity_labels = {
 				[vim.diagnostic.severity.ERROR] = "󰅚 ERROR",
@@ -703,19 +744,19 @@ local pipelines = {
 
 				local label = string.format("[%s] %s", severity, diag.message:gsub("\n", " "))
 
-				table.insert(options, {
-					key = #options,
-					label = { text = label },
+				table.insert(items, {
+					key = #items,
+					label = label,
 					bufnr = bufnr,
 					filename = filename,
 					row = lnum,
 					col = 0,
 				})
 			end
-			callback(options)
+			callback(items)
 		end,
 		filter = function(_, query, callback)
-			callback(filter_options(query))
+			callback(filter_items(query))
 		end,
 		render = function(filtered, query)
 			local results_opts = {
@@ -725,12 +766,14 @@ local pipelines = {
 			}
 			render_results(filtered, results_opts)
 		end,
+		on_choice = open_file_or_buffer,
 	},
 	symbols = {
-		find = function(_query, callback)
-			-- Use cached options (once per picker launch)
-			if state.options ~= nil then
-				callback(state.options)
+		prompt = "Find Symbols",
+		find = function(_, callback)
+			-- Use cached items (once per picker launch)
+			if state.items ~= nil then
+				callback(state.items)
 				return
 			end
 
@@ -750,7 +793,7 @@ local pipelines = {
 					return
 				end
 
-				local options = {}
+				local items = {}
 				local symbol_kind_map = vim.lsp.protocol.SymbolKind
 
 				-- Recursive helper to flatten the AST tree and filter functions
@@ -761,9 +804,9 @@ local pipelines = {
 						local indent = string.rep("  ", depth)
 						local display_name = string.format("%s [%s %s] %s ", indent, icon, kind_name, symbol.name)
 
-						table.insert(options, {
-							key = #options,
-							label = { text = display_name },
+						table.insert(items, {
+							key = #items,
+							label = display_name,
 							bufnr = bufnr,
 							row = symbol.range.start.line + 1,
 							col = symbol.range.start.character + 1,
@@ -780,11 +823,11 @@ local pipelines = {
 				-- Run the processor on the root results
 				process_symbols(result, 0)
 
-				callback(options)
+				callback(items)
 			end)
 		end,
 		filter = function(_, query, callback)
-			local filtered = filter_options(query)
+			local filtered = filter_items(query)
 			callback(filtered)
 		end,
 		render = function(filtered)
@@ -795,12 +838,14 @@ local pipelines = {
 			}
 			render_results(filtered, results_opts)
 		end,
+		on_choice = open_file_or_buffer,
 	},
 	references = {
+		prompt = "Find References",
 		find = function(_, callback)
-			-- Use cached options (once per picker launch)
-			if state.options ~= nil then
-				callback(state.options)
+			-- Use cached items (once per picker launch)
+			if state.items ~= nil then
+				callback(state.items)
 				return
 			end
 
@@ -827,7 +872,7 @@ local pipelines = {
 					return
 				end
 
-				local options = {}
+				local items = {}
 
 				for _, ref in ipairs(result) do
 					local ref_bufnr = vim.uri_to_bufnr(ref.uri)
@@ -847,9 +892,9 @@ local pipelines = {
 
 					local display_name = string.format("%s", line_text)
 
-					table.insert(options, {
-						key = #options,
-						label = { text = display_name },
+					table.insert(items, {
+						key = #items,
+						label = display_name,
 						bufnr = ref_bufnr,
 						row = start_line,
 						col = ref.range.start.character + 1,
@@ -860,12 +905,12 @@ local pipelines = {
 					})
 				end
 
-				state.options = options
-				callback(options)
+				state.items = items
+				callback(items)
 			end)
 		end,
 		filter = function(_, query, callback)
-			local filtered = filter_options(query)
+			local filtered = filter_items(query)
 			callback(filtered)
 		end,
 		render = function(filtered)
@@ -876,8 +921,10 @@ local pipelines = {
 			}
 			render_results(filtered, results_opts)
 		end,
+		on_choice = open_file_or_buffer,
 	},
 	files = {
+		prompt = "Find Files",
 		find = function(query, callback)
 			local shell_cmd = "fd --type f --hidden --no-ignore --max-results 1000 --exclude .git"
 			if query ~= "" then
@@ -885,30 +932,32 @@ local pipelines = {
 			end
 
 			run_shell_cmd(shell_cmd, function(output)
-				local options = {}
+				local items = {}
 				for _, line in ipairs(output) do
-					table.insert(options, {
-						key = #options,
-						label = { text = line },
+					table.insert(items, {
+						key = #items,
+						label = line,
 						filename = line,
 					})
 				end
-				callback(options)
+				callback(items)
 			end)
 		end,
 		filter = function(_, query, callback)
 			-- We still filter these using nvim fuzzy match to get the higlights,
-			-- also `fuzzy_highlight_options` must be on the main thread
+			-- also `fuzzy_highlight_items` must be on the main thread
 			vim.schedule(function()
-				callback(fuzzy_highlight_options(query))
+				callback(fuzzy_highlight_items(query))
 			end)
 		end,
 		render = function(filtered)
 			local ui_opts = { show_file = false, show_row = false, show_col = false }
 			render_results(filtered, ui_opts)
 		end,
+		on_choice = open_file_or_buffer,
 	},
 	live_grep = {
+		prompt = "Live Grep",
 		find = function(query, callback)
 			if query == "" then
 				render_results({}, {})
@@ -919,7 +968,7 @@ local pipelines = {
 				string.format("rg --json --hidden --smart-case %s | head -n 100", vim.fn.shellescape(query))
 
 			run_shell_cmd(shell_cmd, function(output)
-				local options = {}
+				local items = {}
 				for _, line in ipairs(output) do
 					local ok, parsed = pcall(vim.json.decode, line)
 					if ok and parsed and parsed.type == "match" then
@@ -932,15 +981,14 @@ local pipelines = {
 							local start_pos = submatch.start
 							local match_length = submatch["end"] - submatch.start
 							local text = data.lines.text
-							local label = {
-								text = text:gsub("[\r\n]", " "), -- Strip any new lines
-								highlights = {
-									{ start_col = start_pos, end_col = start_pos + match_length },
-								},
+							local label = text:gsub("[\r\n]", " ") -- Strip any new lines								text = text:gsub("[\r\n]", " "), -- Strip any new lines
+							local highlights = {
+								{ start_col = start_pos, end_col = start_pos + match_length },
 							}
-							table.insert(options, {
-								key = #options,
+							table.insert(items, {
+								key = #items,
 								label = label,
+								highlights = highlights,
 								filename = filename,
 								row = lnum,
 								col = start_pos,
@@ -949,32 +997,28 @@ local pipelines = {
 						end
 					end
 				end
-				callback(options)
+				callback(items)
 			end)
 		end,
-		filter = function(options, _, callback)
-			callback(options) -- Passthrough
+		filter = function(items, _, callback)
+			callback(items) -- Passthrough
 		end,
 		render = function(filtered)
 			local ui_opts = { show_file = true, show_row = true, show_col = true }
 			render_results(filtered, ui_opts)
 		end,
+		on_choice = open_file_or_buffer,
 	},
 }
 
 local function run_search()
 	local query = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)[1] or ""
-	local pipeline = pipelines[state.mode or "buffers"]
 
-	if not pipeline then
-		error("Unkown pipeline mode: " .. state.mode)
-	end
-
-	pipeline.find(query, function(options)
-		state.options = options
-		pipeline.filter(options, query, function(filtered)
+	state.pipeline.find(query, function(items)
+		state.items = items
+		state.pipeline.filter(items, query, function(filtered)
 			state.results = filtered
-			pipeline.render(filtered, query)
+			state.pipeline.render(filtered, query)
 		end)
 	end)
 end
@@ -1005,22 +1049,56 @@ local function focus_last_result_line()
 	end
 end
 
+local function get_visual_line_range(winnr)
+	local v_pos = vim.fn.getpos("v")
+	local visual_row = v_pos[2]
+
+	local cursor = vim.api.nvim_win_get_cursor(winnr)
+	local cursor_row = cursor[1]
+
+	local start_row = math.min(visual_row, cursor_row)
+	local end_row = math.max(visual_row, cursor_row)
+
+	return start_row, end_row
+end
+
 local function accept_selection()
-	debug_log("accept_selection")
-	local selected = state.results[state.selected_idx]
+	local mode = vim.api.nvim_get_mode().mode
+	local visual_mode = mode == "v" or mode == "V" or mode == "\22" -- \22 is block mode
+	local inside_results_win = state.results_win == vim.api.nvim_get_current_win()
 
-	if selected and selected.filename then
+	if visual_mode and inside_results_win then
+		local start_row, end_row = get_visual_line_range(state.results_win)
+
+		local items, idxs = {}, {}
+		for row = start_row, end_row do
+			table.insert(items, state.results[row].original_item or state.results[row])
+			table.insert(idxs, state.results[row].key)
+		end
+		-- debug_log(vim.inspect(items))
+		-- debug_log(vim.inspect(idxs))
+		-- TODO: Implement
+	else
+		debug_log("single accept_selection")
+		local selected = state.results[state.selected_idx]
+
+		if selected and state.on_choice then
+			debug_log("Chosen: " .. vim.inspect(selected))
+			local item = selected.original_item or selected
+			local idx = selected.key or state.selected_idx
+			state.on_choice(item, idx)
+		end
+
 		vim.cmd("stopinsert")
-		vim.api.nvim_win_call(state.original_win, function()
-			vim.cmd("edit " .. vim.fn.fnameescape(selected.filename))
-			vim.api.nvim_win_set_cursor(state.original_win, { selected.row or 1, selected.col or 0 })
-		end)
-	elseif selected and selected.bufnr then
-		vim.cmd("stopinsert")
-		vim.api.nvim_win_set_buf(state.original_win, selected.bufnr)
-		vim.api.nvim_win_set_cursor(state.original_win, { selected.row, selected.col })
+		close_picker()
 	end
+end
 
+local function reject_selection()
+	if state.on_choice then
+		state.on_choice(nil, nil)
+	end
+	vim.cmd("stopinsert")
 	close_picker()
 end
 
@@ -1034,13 +1112,6 @@ end
 
 local function setup_keybindings()
 	local common_opts = { silent = true }
-
-	-- Exiting the picker
-	vim.keymap.set("n", "<Esc>", close_picker, { buffer = state.input_buf })
-	vim.keymap.set("n", "<Esc>", close_picker, { buffer = state.results_buf })
-	vim.keymap.set("n", "<Esc>", close_picker, { buffer = state.preview_buf })
-	vim.keymap.set("n", "q", close_picker, { buffer = state.results_buf })
-	vim.keymap.set("n", "q", close_picker, { buffer = state.preview_buf })
 
 	-- Switching between windows
 	vim.keymap.set("n", "j", focus_second_result_line, { buffer = state.input_buf })
@@ -1061,7 +1132,14 @@ local function setup_keybindings()
 
 	-- Selection acceptance
 	vim.keymap.set({ "n", "i" }, "<CR>", accept_selection, { buffer = state.input_buf, unpack(common_opts) })
-	vim.keymap.set("n", "<CR>", accept_selection, { buffer = state.results_buf, unpack(common_opts) })
+	vim.keymap.set({ "n", "v" }, "<CR>", accept_selection, { buffer = state.results_buf, unpack(common_opts) })
+
+	-- Selection rejection
+	vim.keymap.set("n", "<Esc>", reject_selection, { buffer = state.input_buf })
+	vim.keymap.set("n", "<Esc>", reject_selection, { buffer = state.results_buf })
+	vim.keymap.set("n", "<Esc>", reject_selection, { buffer = state.preview_buf })
+	vim.keymap.set("n", "q", reject_selection, { buffer = state.results_buf })
+	vim.keymap.set("n", "q", reject_selection, { buffer = state.preview_buf })
 
 	-- Limit input buffer to single line input
 	vim.keymap.set("n", "o", "<NOP>", { buffer = state.input_buf })
@@ -1093,6 +1171,8 @@ local function setup_event_listeners()
 					local row = vim.api.nvim_win_get_cursor(state.results_win)[1]
 					update_selection(row)
 					render_preview()
+
+					debug_log(vim.inspect(vim.api.nvim_get_mode()))
 				end)
 			)
 		end,
@@ -1138,7 +1218,7 @@ local function setup_event_listeners()
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = state.ac_group,
 		callback = function()
-			-- If any window is closed by the user, close the entire picker
+			-- This is mostly to handle edge cases where the user closes one of the windows by accident
 			local current_win = vim.api.nvim_get_current_win()
 
 			local is_plugin_win = current_win == state.input_win
@@ -1146,7 +1226,7 @@ local function setup_event_listeners()
 				or current_win == state.preview_win
 
 			if is_plugin_win and state.is_open then
-				close_picker()
+				reject_selection()
 			end
 		end,
 	})
@@ -1171,12 +1251,24 @@ local function setup_highlight_groups()
 end
 
 function M.ui_select(items, opts, on_choice)
-	state.prompt = opts.prompt or "Choose one of the following:"
-	state.options = items
-	state.on_choice = on_choice
+	local opt_format_item = opts.format_item or tostring
 
-	state.mode = "ui_select"
-	state.options = items
+	state.items = {}
+	for idx, item in ipairs(items) do
+		table.insert(state.items, {
+			key = idx,
+			label = opt_format_item(item),
+			original_item = item,
+		})
+	end
+
+	M.show_select({
+		mode = "ui_select",
+		prompt = opts.prompt,
+		on_choice = on_choice,
+		input_position = InputPosition.TOP,
+		preview_position = PreviewPosition.NONE,
+	})
 end
 
 function M.show_select(opts)
@@ -1184,12 +1276,26 @@ function M.show_select(opts)
 		return -- Can only have a single instance of picker open
 	end
 
+	local pipeline = pipelines[opts.mode or "buffers"]
+
+	if not pipeline then
+		error("Unkown pipeline mode: " .. vim.inspect(opts.mode))
+	end
+
 	state.is_open = true
 	state.mode = opts.mode
+	state.pipeline = pipeline
+	state.prompt = opts.prompt or pipeline.prompt
+	state.on_choice = opts.on_choice or pipeline.on_choice
+
 	state.original_buf = vim.api.nvim_get_current_buf()
 	state.original_win = vim.api.nvim_get_current_win()
 
-	init_windows(opts.mode, InputPosition.TOP, PreviewPosition.BOTTOM)
+	init_windows(
+		opts.mode,
+		opts.input_position or state.config.input_position,
+		opts.preview_position or state.config.preview_position
+	)
 	setup_keybindings()
 	setup_event_listeners()
 	run_search()
@@ -1204,6 +1310,7 @@ function M.setup(config)
 		width = config.width or 0.8,
 		height = config.height or 0.8,
 	}
+	vim.ui.select = M.ui_select
 end
 
 return M

@@ -164,7 +164,7 @@ vim.keymap.set("n", "<leader>wr", resize_mode, { desc = "Enter window resizing m
 -- Highlight when yanking (copying) text
 vim.api.nvim_create_autocmd("TextYankPost", {
 	desc = "Highlight when yanking (copying) text",
-	group = vim.api.nvim_create_augroup("kickstart-highlight-yank", { clear = true }),
+	group = vim.api.nvim_create_augroup("highlight-yank", { clear = true }),
 	callback = function()
 		vim.hl.on_yank()
 	end,
@@ -227,7 +227,12 @@ vim.pack.add({
 	{ src = "https://github.com/smoka7/hop.nvim" },
 	{ src = "https://github.com/saghen/blink.lib" },
 	{ src = "https://github.com/saghen/blink.cmp" },
+	{ src = "https://github.com/nvim-mini/mini.pairs" },
+	{ src = "https://github.com/nvim-mini/mini.surround" },
 })
+
+require("mini.pairs").setup() -- Auto bracket pairing
+require("mini.surround").setup() -- Bracket surrounding
 
 -- Autocomplete: Blink (you need rust & cargo for this)
 local has_blink, blink = pcall(require, "blink.cmp")
@@ -267,25 +272,40 @@ local mason_bin = vim.fn.stdpath("data") .. "/mason/bin/"
 vim.api.nvim_create_autocmd("LspAttach", {
 	callback = function(args)
 		local opts = { buffer = args.buf }
-		local has_fzf, fzf = pcall(require, "fzf-lua")
-		if has_fzf then
-			vim.keymap.set("n", "gd", function()
-				fzf.lsp_definitions()
-			end, opts)
-			vim.keymap.set("n", "gi", function()
-				fzf.lsp_implementations()
-			end, opts)
-			vim.keymap.set("n", "gD", function()
-				fzf.lsp_declarations()
-			end, opts)
-			vim.keymap.set("n", "gt", function()
-				fzf.lsp_typedefs()
-			end, opts)
 
-			-- vim.keymap.set("n", "<leader>ca", function()
-			-- 	fzf.lsp_code_actions()
-			-- end, opts)
-		end
+		-- local picker = require("custom.picker")
+		--
+		-- vim.keymap.set("n", "gd", picker.find_definitions, opts)
+		-- vim.keymap.set("n", "gi", picker.find_implementations, opts)
+		-- The most robust way to register it in your LspAttach:
+		--
+		-- vim.keymap.set("n", "gD", function()
+		-- 	print("Do nothing")
+		-- end, opts)
+		-- vim.keymap.set("n", "gD", "<cmd>lua require('custom.picker').find_declarations()<CR>", {
+		-- 	buffer = args.buf,
+		-- 	silent = true,
+		-- 	noremap = true,
+		-- })
+		-- local has_fzf, fzf = pcall(require, "fzf-lua")
+		-- if has_fzf then
+		-- 	vim.keymap.set("n", "gd", function()
+		-- 		fzf.lsp_definitions()
+		-- 	end, opts)
+		-- 	vim.keymap.set("n", "gi", function()
+		-- 		fzf.lsp_implementations()
+		-- 	end, opts)
+		-- 	vim.keymap.set("n", "gD", function()
+		-- 		fzf.lsp_declarations()
+		-- 	end, opts)
+		-- 	vim.keymap.set("n", "gt", function()
+		-- 		fzf.lsp_typedefs()
+		-- 	end, opts)
+		--
+		-- 	-- vim.keymap.set("n", "<leader>ca", function()
+		-- 	-- 	fzf.lsp_code_actions()
+		-- 	-- end, opts)
+		-- end
 
 		-- Standard way to map code actions in Neovim 0.7+
 		vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, {
@@ -319,7 +339,14 @@ vim.lsp.enable("lua_ls")
 
 -- LSP: C/C++ (clangd)
 vim.lsp.config("clangd", {
-	cmd = { mason_bin .. "clangd" },
+	cmd = {
+		mason_bin .. "clangd",
+		"--background-index", -- Force background indexing
+		-- "--clang-tidy", -- Enable linting
+		"--header-insertion=iwyu", -- Include What You Use suggestions
+		"--completion-style=detailed",
+		-- "--fallback-style=llvm",
+	},
 	filetypes = { "c", "cpp", "objc", "objcpp" },
 	root_markers = { ".git", "compile_commands.json", "Makefile" },
 	capabilities = blink.get_lsp_capabilities(),
@@ -455,15 +482,19 @@ vim.keymap.set("n", "<leader>fe", ":NvimTreeFindFile<CR>", { desc = "[F]ind in [
 
 -- Jumper: hop.nivm
 local hop = require("hop")
+local hop_treesitter = require("hop-treesitter")
 hop.setup({
 	-- keys = "etovxqpdygfblzhckisuran", -- Customize your hinting keys here
 	keys = "wertyuiopasdfghjklcvnmx", -- Customize your hinting keys here
-	multi_window = true,
+	multi_windows = true,
 })
 
+-- Test Cases: camelCase test_PascalCase snake_case 0.12 -0.23 A AA       b  b 1 123
 vim.keymap.set({ "n", "v", "o" }, ";", function()
-	hop.hint_words()
+	hop.hint_patterns({}, "\\v[a-z]+|[A-Z]+|[A-Z][A-Z]+|[A-Z][a-z]+|[0-9][0-9\\.]+")
 end, { desc = "Hop Word" })
+vim.keymap.set({ "n", "v", "o" }, "<leader>;l", hop.hint_lines, { desc = "Hop Word" })
+vim.keymap.set({ "n", "v", "o" }, "<leader>;n", hop_treesitter.hint_nodes, { desc = "Hop Node" })
 
 -- Floating terminal (custom)
 require("custom.floaterm").setup()
@@ -473,92 +504,123 @@ vim.keymap.set({ "n", "t" }, "<C-Space>", "<cmd>FloaTermToggle<CR>", { desc = "T
 vim.keymap.set({ "t" }, "<leader>q", "<cmd>close<CR>", { desc = "Quit window in terminal mode" })
 vim.keymap.set({ "n" }, "<leader>fq", "<cmd>FloaTermQuickfix<CR>", { desc = "[F]ind [Q]uickfix" })
 
--- Picker custom
-local picker = require("custom.picker")
-picker.setup({
-	width = 0.8,
-	height = 0.8,
-	preview_position = "BOTTOM",
-	input_position = "TOP",
-})
+-- Text Objects
+local text_objects = require("custom.text_objects")
 
-vim.keymap.set("n", "<leader>ff", function()
-	require("custom.picker").show_select({
-		mode = "files",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "ic", function()
+	text_objects.select_text_object("function_call")
+end, { desc = "Select function call" })
 
-vim.keymap.set("n", "<leader>fo", function()
-	require("custom.picker").show_select({
-		mode = "buffers",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "ac", function()
+	text_objects.select_text_object("function_call")
+end, { desc = "Select function call" })
 
-vim.keymap.set("n", "<leader>fd", function()
-	require("custom.picker").show_select({
-		mode = "diagnostics",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "if", function()
+	text_objects.select_text_object("function_inner")
+end, { desc = "Select inner arguments" })
 
-vim.keymap.set("n", "<leader>fs", function()
-	require("custom.picker").show_select({
-		mode = "symbols",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "af", function()
+	text_objects.select_text_object("function_outer")
+end, { desc = "Select outer arguments" })
 
-vim.keymap.set("n", "<leader>fr", function()
-	require("custom.picker").show_select({
-		mode = "references",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "ia", function()
+	text_objects.select_text_object("parameter_inner")
+end, { desc = "Select inner arguments" })
 
-vim.keymap.set("n", "<leader>fg", function()
-	require("custom.picker").show_select({
-		mode = "live_grep",
-	})
-end, { desc = "Custom picker" })
+vim.keymap.set({ "x", "o" }, "aa", function()
+	text_objects.select_text_object("parameter_outer")
+end, { desc = "Select outer arguments" })
 
-vim.keymap.set("n", "<leader>ft", function()
-	local items = { "Apple", "Banana", "Cherry" }
-	local opts = {
-		prompt = "Pick a fruit:",
-		format_item = tostring,
-	}
+vim.keymap.set("n", "<leader>rs", function()
+	vim.cmd("source %")
+	print("Sourced!")
+end, { desc = "reload plugin" })
 
-	require("custom.picker").ui_select(items, opts, function() end)
-end, { desc = "Custom picker" })
-
-vim.ui.select = require("custom.picker").ui_select
-
--- Helper function to reload the picker module safely
+---
 local function reload_picker()
 	-- 1. Clear the cached module so Neovim looks at the file on disk again
-	package.loaded["custom.pickerrefactor"] = nil
+	package.loaded["custom.picker"] = nil
 
 	-- 2. Re-require and setup
-	local status, picker = pcall(require, "custom.pickerrefactor")
+	local status, picker = pcall(require, "custom.picker")
 	if status then
 		picker.setup({
 			width = 0.8,
 			height = 0.8,
-			input_position = "TOP",
-			preview_position = "BOTTOM",
+			input_position = "top",
+			preview_position = "none",
 		})
 
 		vim.keymap.set("n", "<leader>ft", function()
-			require("custom.pickerrefactor").ui_select({
+			require("custom.picker").ui_select({
 				"Apples",
+				"Apples 2",
+				"Apples 3",
+				"Blah Apples",
+				"Blah Apples 2",
+				"Blah Apples 3",
 				"Cherries",
 				"Bananas",
-			}, {}, function(item, idx) 
+			}, {}, function(item, idx)
 				print("Selected: " .. vim.inspect(item) .. ", " .. vim.inspect(idx))
 			end)
 		end, { desc = "Custom picker" })
 
+		vim.keymap.set("n", "<leader>kt", function()
+			local items = {
+				"Apples",
+				"Apples 2",
+				"Apples 3",
+				"Blah Apples",
+				"Blah Apples 2",
+				"Blah Apples 3",
+				"Cherries",
+				"Bananas",
+			}
+			require("custom.picker").generic_select(items, {
+				prompt = "Choose something",
+				on_action = {
+					["<CR>"] = function(items)
+						print("selected: " .. vim.inspect(items))
+					end,
+				},
+			})
+		end, { desc = "Custom picker" })
+
+		vim.keymap.set("n", "<leader>fs", function()
+			require("custom.picker").find_symbols()
+		end, { desc = "[F]ind [S]ymbols" })
+
+		vim.keymap.set("n", "<leader>fd", function()
+			require("custom.picker").find_diagnostics()
+		end, { desc = "[F]ind [D]iagnostics" })
+
+		vim.keymap.set("n", "<leader>ff", function()
+			require("custom.picker").find_files()
+		end, { desc = "[F]ind [F]iles" })
+
+		vim.keymap.set("n", "<leader>fg", function()
+			require("custom.picker").live_grep()
+		end, { desc = "[F]ind Live [G]rep" })
+
+		vim.keymap.set("n", "<leader>fo", function()
+			require("custom.picker").find_buffers()
+		end, { desc = "[F]ind [O]pen Buffers" })
+
+		vim.keymap.set("n", "<leader>fr", function()
+			require("custom.picker").find_references()
+		end, { desc = "[F]ind [U]sages" })
+
+		vim.keymap.set("n", "gd", picker.find_definitions, {})
+		vim.keymap.set("n", "gi", picker.find_implementations, {})
+		vim.keymap.set("n", "gD", picker.find_declarations, {})
+		vim.keymap.set("n", "gt", picker.find_typedefs, {})
+		--
 		print("Picker reloaded successfully!")
 	else
 		vim.notify("Failed to reload picker: " .. tostring(picker), vim.log.levels.ERROR)
 	end
 end
+reload_picker()
 
 vim.keymap.set("n", "<leader>rp", reload_picker, { desc = "reload plugin" })
