@@ -7,7 +7,9 @@ $directory\
 [](fg:#1982C4 bg:#7339ad)\
 $git_branch\
 $git_status\
-[](fg:#7339ad)\
+[](fg:#7339ad bg:#2a8427)\
+$python\
+[](fg:#2a8427)\
 """
 
 # Disable the blank line at the start of the prompt
@@ -42,4 +44,10 @@ format = '[ $symbol $branch ]($style)'
 [git_status]
 style = "bg:#7339ad"
 format = '[$all_status$ahead_behind ]($style)'
+
+[python]
+symbol = "🐍"
+format = "[$symbol $virtualenv]($style)"
+style = "bg:#2a8427"
+pyenv_version_name = false
 

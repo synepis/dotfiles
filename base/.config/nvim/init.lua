@@ -229,10 +229,13 @@ vim.pack.add({
 	{ src = "https://github.com/saghen/blink.cmp" },
 	{ src = "https://github.com/nvim-mini/mini.pairs" },
 	{ src = "https://github.com/nvim-mini/mini.surround" },
+	{ src = "https://github.com/nvim-mini/mini.ai" },
+	{ src = "https://github.com/mfussenegger/nvim-dap" },
 })
 
 require("mini.pairs").setup() -- Auto bracket pairing
 require("mini.surround").setup() -- Bracket surrounding
+require("mini.ai").setup() -- Bracket surrounding
 
 -- Autocomplete: Blink (you need rust & cargo for this)
 local has_blink, blink = pcall(require, "blink.cmp")
@@ -371,6 +374,18 @@ vim.lsp.config("gopls", {
 })
 vim.lsp.enable("gopls")
 
+-- LSP: typst (tinymist)
+vim.lsp.config("tinymist", {
+	cmd = { "tinymist" },
+	filetypes = { "typst" },
+	root_markers = { ".git" },
+	capabilities = blink.get_lsp_capabilities(),
+	settings = {
+		exportPdf = "onSave",
+		formatterMode = "typstyle",
+	},
+})
+vim.lsp.enable("tinymist")
 --
 -- Color Scheme
 require("kanagawa").setup()
@@ -480,6 +495,69 @@ vim.keymap.set("n", "<leader>we", ":NvimTreeToggle<CR>", { desc = "[W]indow [E]x
 -- Useful if you're in a file and want to jump back to the tree without toggling it
 vim.keymap.set("n", "<leader>fe", ":NvimTreeFindFile<CR>", { desc = "[F]ind in [E]" })
 
+-- DAP
+local dap = require("dap")
+-- Helper function to make defining keymaps cleaner
+local function map(mode, lhs, rhs, desc)
+  vim.keymap.set(mode, lhs, rhs, { silent = true, desc = "DAP: " .. desc })
+end
+
+-- ==========================================
+-- 1. Execution & Flow Control
+-- ==========================================
+-- Start debugging or jump to the next breakpoint
+map("n", "<F5>", dap.continue, "Start / Continue Debugging")
+-- Step OVER a line of code (execute it, but don't drop inside its function)
+map("n", "<F10>", dap.step_over, "Step Over")
+-- Step INTO a function call to debug what's inside it
+map("n", "<F11>", dap.step_into, "Step Into")
+-- Step OUT of the current function back to where it was called
+map("n", "<F12>", dap.step_out, "Step Out")
+
+-- ==========================================
+-- 2. Breakpoint Management
+-- ==========================================
+-- Toggle a red-dot breakpoint on the current line
+map("n", "<leader>db", dap.toggle_breakpoint, "Toggle Breakpoint")
+-- Clear all active breakpoints in the current workspace
+map("n", "<leader>dc", dap.clear_breakpoints, "Clear All Breakpoints")
+
+-- ==========================================
+-- 3. Inspection & State (Great for Math!)
+-- ==========================================
+-- Hover over a variable (like a Vector3 or Matrix) to see its current value instantly
+map("n", "<leader>dh", function()
+  require("dap.ui.widgets").hover()
+end, "Hover Variable Value")
+
+dap.adapters.python = function(callback, config)
+	if config.request == "launch" then
+		callback({
+			type = "executable",
+			command = os.getenv("VIRTUAL_ENV") and (os.getenv("VIRTUAL_ENV") .. "/bin/python") or "python3",
+			args = { "-m", "debugpy.adapter" },
+		})
+	end
+end
+
+dap.configurations.python = {
+  {
+    type = 'python',
+    request = 'launch',
+    name = "Launch Current File (Active Venv)",
+    program = "${file}",
+    pythonPath = function()
+      local cwd = vim.fn.getcwd()
+      if vim.fn.executable(cwd .. '/.venv/bin/python') == 1 then
+        return cwd .. '/.venv/bin/python'
+      else
+        return "/usr/bin/python3"
+      end
+    end,
+    console = "externalTerminal",
+  },
+}
+
 -- Jumper: hop.nivm
 local hop = require("hop")
 local hop_treesitter = require("hop-treesitter")
@@ -505,36 +583,36 @@ vim.keymap.set({ "t" }, "<leader>q", "<cmd>close<CR>", { desc = "Quit window in 
 vim.keymap.set({ "n" }, "<leader>fq", "<cmd>FloaTermQuickfix<CR>", { desc = "[F]ind [Q]uickfix" })
 
 -- Text Objects
-local text_objects = require("custom.text_objects")
-
-vim.keymap.set({ "x", "o" }, "ic", function()
-	text_objects.select_text_object("function_call")
-end, { desc = "Select function call" })
-
-vim.keymap.set({ "x", "o" }, "ac", function()
-	text_objects.select_text_object("function_call")
-end, { desc = "Select function call" })
-
-vim.keymap.set({ "x", "o" }, "if", function()
-	text_objects.select_text_object("function_inner")
-end, { desc = "Select inner arguments" })
-
-vim.keymap.set({ "x", "o" }, "af", function()
-	text_objects.select_text_object("function_outer")
-end, { desc = "Select outer arguments" })
-
-vim.keymap.set({ "x", "o" }, "ia", function()
-	text_objects.select_text_object("parameter_inner")
-end, { desc = "Select inner arguments" })
-
-vim.keymap.set({ "x", "o" }, "aa", function()
-	text_objects.select_text_object("parameter_outer")
-end, { desc = "Select outer arguments" })
-
-vim.keymap.set("n", "<leader>rs", function()
-	vim.cmd("source %")
-	print("Sourced!")
-end, { desc = "reload plugin" })
+-- local text_objects = require("custom.text_objects")
+--
+-- vim.keymap.set({ "x", "o" }, "ic", function()
+-- 	text_objects.select_text_object("function_call")
+-- end, { desc = "Select function call" })
+--
+-- vim.keymap.set({ "x", "o" }, "ac", function()
+-- 	text_objects.select_text_object("function_call")
+-- end, { desc = "Select function call" })
+--
+-- vim.keymap.set({ "x", "o" }, "if", function()
+-- 	text_objects.select_text_object("function_inner")
+-- end, { desc = "Select inner arguments" })
+--
+-- vim.keymap.set({ "x", "o" }, "af", function()
+-- 	text_objects.select_text_object("function_outer")
+-- end, { desc = "Select outer arguments" })
+--
+-- vim.keymap.set({ "x", "o" }, "ia", function()
+-- 	text_objects.select_text_object("parameter_inner")
+-- end, { desc = "Select inner arguments" })
+--
+-- vim.keymap.set({ "x", "o" }, "aa", function()
+-- 	text_objects.select_text_object("parameter_outer")
+-- end, { desc = "Select outer arguments" })
+--
+-- vim.keymap.set("n", "<leader>rs", function()
+-- 	vim.cmd("source %")
+-- 	print("Sourced!")
+-- end, { desc = "reload plugin" })
 
 ---
 local function reload_picker()
@@ -615,8 +693,6 @@ local function reload_picker()
 		vim.keymap.set("n", "gi", picker.find_implementations, {})
 		vim.keymap.set("n", "gD", picker.find_declarations, {})
 		vim.keymap.set("n", "gt", picker.find_typedefs, {})
-		--
-		print("Picker reloaded successfully!")
 	else
 		vim.notify("Failed to reload picker: " .. tostring(picker), vim.log.levels.ERROR)
 	end
