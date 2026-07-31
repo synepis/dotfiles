@@ -1340,7 +1340,7 @@ end
 
 function M.setup(config)
 	I.setup_highlight_groups()
-	print("loaded")
+	print("Loaded picker")
 end
 
 --- Reads a file asynchronously

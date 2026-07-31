@@ -17,9 +17,15 @@ inoremap jk <esc>
 inoremap <C-k> <up>
 inoremap <C-j> <down>
 
+noremap M J
+
 " H & L for home/end operations
 map H 0
 map L $
+
+map J <C-d>
+map K <C-u>
+
 
 " pane/window movements
 noremap <leader>wh <C-w>h
@@ -69,7 +75,8 @@ vmap <leader>cf :action ReformatCode<CR>
 nmap <leader>rn :action RenameElement<CR>
 
 " jumping around
-map ; <Plug>(easymotion-s2)
+" map ; <Plug>(easymotion-s2)
+map ; <Plug>(easymotion-bd-w)
 
 " make y and p use system clipboard by default
 nnoremap y "+y
@@ -85,9 +92,10 @@ nnoremap ml :action ShowBookmarks<CR>
 
 " go to:
 " noremap <leader>gf :action GotoFile<CR>
-noremap <leader>gi :action GotoImplementation<CR>
-noremap <leader>gd :action GotoDeclaration<CR>
-noremap <leader>ga :action GotoAction<CR>
+noremap gi :action GotoImplementation<CR>
+noremap gd :action GotoDeclaration<CR>
+noremap ga :action GotoAction<CR>
+noremap gh :action ShowHoverInfo<CR>
 
 " multiple cursors
 nmap <A-j> :action EditorCloneCaretBelow<CR>

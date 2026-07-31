@@ -6,7 +6,7 @@ vim.g.have_nerd_font = true
 -- [[ Basic options ]] --
 vim.o.tabstop = 4
 vim.o.shiftwidth = 4
-vim.o.expandtab = false
+vim.o.expandtab = true
 vim.o.smartindent = true
 vim.o.wrap = false
 vim.o.breakindent = true
@@ -26,7 +26,7 @@ vim.o.timeoutlen = 300
 vim.o.splitright = true
 vim.o.splitbelow = true
 
-vim.o.inccommand = "split"
+vim.o.inccommand = "nosplit"
 
 vim.o.cursorline = true
 vim.o.scrolloff = 10
@@ -34,6 +34,9 @@ vim.o.scrolloff = 10
 vim.o.confirm = true
 
 vim.opt.termguicolors = true
+
+-- Quick replace
+vim.keymap.set("n", "R", [[:%s/\<<C-r><C-w>\>/]], { desc = "Search and replace word under cursor" })
 
 -- Sync clipboard between OS and Neovim.
 vim.schedule(function()
@@ -114,43 +117,60 @@ vim.opt.winbar = "%{%v:lua.custom_winbar()%}"
 
 -- Window resizing
 local function resize_mode()
-	print("-- Window Resize Active -- ")
-
 	local winnr = vim.fn.winnr()
 	local windows = vim.api.nvim_list_wins()
 	local is_last_col = vim.fn.winnr("l") == winnr and #windows > 1
 	local is_last_row = vim.fn.winnr("j") == winnr and #windows > 1
 
+	-- highligh the resizing window
+	vim.api.nvim_set_hl(0, "ResizeModeActive", { bg = "#395075" })
+
+	local current_win = vim.api.nvim_get_current_win()
+	local original_winhl = vim.wo[current_win].winhighlight
+
+	local new_winhl = "Normal:ResizeModeActive"
+	if original_winhl ~= "" then
+		new_winhl = original_winhl .. "," .. new_winhl
+	end
+	vim.wo[current_win].winhighlight = new_winhl
+	vim.cmd("redraw")
+
+    print(original_winhl)
+
+	-- Keybindings for resising
 	while true do
 		local char = vim.fn.getchar()
 		local key = type(char) == "number" and vim.fn.nr2char(char) or char
+		local low_key = string.lower(key)
 
-		if key == "h" then
+		local inc = key == low_key and "2" or "20"
+
+		if low_key == "h" then
 			if is_last_col then
-				vim.cmd("vertical resize +2")
+				vim.cmd("vertical resize +" .. inc)
 			else
-				vim.cmd("vertical resize -2")
+				vim.cmd("vertical resize -" .. inc)
 			end
-		elseif key == "l" then
+		elseif low_key == "l" then
 			if is_last_col then
-				vim.cmd("vertical resize -2")
+				vim.cmd("vertical resize -" .. inc)
 			else
-				vim.cmd("vertical resize +2")
+				vim.cmd("vertical resize +" .. inc)
 			end
-		elseif key == "j" then
+		elseif low_key == "j" then
 			if is_last_row then
-				vim.cmd("resize -2")
+				vim.cmd("resize -" .. inc)
 			else
-				vim.cmd("resize +2")
+				vim.cmd("resize +" .. inc)
 			end
-		elseif key == "k" then
+		elseif low_key == "k" then
 			if is_last_row then
-				vim.cmd("resize +2")
+				vim.cmd("resize +" .. inc)
 			else
-				vim.cmd("resize -2")
+				vim.cmd("resize -" .. inc)
 			end
 		else
-			print("-- Widow Resize Stopped --")
+			vim.wo[current_win].winhighlight = original_winhl
 			break
 		end
 		vim.cmd("redraw")
@@ -235,7 +255,16 @@ vim.pack.add({
 
 require("mini.pairs").setup() -- Auto bracket pairing
 require("mini.surround").setup() -- Bracket surrounding
-require("mini.ai").setup() -- Bracket surrounding
+local spec_treesitter = require("mini.ai").gen_spec.treesitter
+require("mini.ai").setup({
+	custom_textobjects = {
+		f = spec_treesitter({ a = "@function.outer", i = "@function.inner" }),
+		o = spec_treesitter({
+			a = { "@conditional.outer", "@loop.outer" },
+			i = { "@conditional.inner", "@loop.inner" },
+		}),
+	},
+})
 
 -- Autocomplete: Blink (you need rust & cargo for this)
 local has_blink, blink = pcall(require, "blink.cmp")
@@ -283,31 +312,31 @@ vim.api.nvim_create_autocmd("LspAttach", {
 		-- The most robust way to register it in your LspAttach:
 		--
 		-- vim.keymap.set("n", "gD", function()
-		-- 	print("Do nothing")
+		--  print("Do nothing")
 		-- end, opts)
 		-- vim.keymap.set("n", "gD", "<cmd>lua require('custom.picker').find_declarations()<CR>", {
-		-- 	buffer = args.buf,
-		-- 	silent = true,
-		-- 	noremap = true,
+		--  buffer = args.buf,
+		--  silent = true,
+		--  noremap = true,
 		-- })
 		-- local has_fzf, fzf = pcall(require, "fzf-lua")
 		-- if has_fzf then
-		-- 	vim.keymap.set("n", "gd", function()
-		-- 		fzf.lsp_definitions()
-		-- 	end, opts)
-		-- 	vim.keymap.set("n", "gi", function()
-		-- 		fzf.lsp_implementations()
-		-- 	end, opts)
-		-- 	vim.keymap.set("n", "gD", function()
-		-- 		fzf.lsp_declarations()
-		-- 	end, opts)
-		-- 	vim.keymap.set("n", "gt", function()
-		-- 		fzf.lsp_typedefs()
-		-- 	end, opts)
+		--  vim.keymap.set("n", "gd", function()
+		--      fzf.lsp_definitions()
+		--  end, opts)
+		--  vim.keymap.set("n", "gi", function()
+		--      fzf.lsp_implementations()
+		--  end, opts)
+		--  vim.keymap.set("n", "gD", function()
+		--      fzf.lsp_declarations()
+		--  end, opts)
+		--  vim.keymap.set("n", "gt", function()
+		--      fzf.lsp_typedefs()
+		--  end, opts)
 		--
-		-- 	-- vim.keymap.set("n", "<leader>ca", function()
-		-- 	-- 	fzf.lsp_code_actions()
-		-- 	-- end, opts)
+		--  -- vim.keymap.set("n", "<leader>ca", function()
+		--  --  fzf.lsp_code_actions()
+		--  -- end, opts)
 		-- end
 
 		-- Standard way to map code actions in Neovim 0.7+
@@ -398,6 +427,23 @@ require("conform").setup({
 		lua = { "stylua" },
 		python = { "black" },
 		javascript = { "prettier" },
+		markdown = { "prettier" },
+	},
+	formatters = {
+		prettier = {
+			inherit = false,
+			command = "prettier",
+			args = function(_, _)
+				return {
+					"--stdin-filepath",
+					"$FILENAME",
+					"--print-width",
+					"100",
+					"--prose-wrap",
+					"always",
+				}
+			end,
+		},
 	},
 })
 vim.keymap.set("n", "<leader>cf", function()
@@ -499,7 +545,7 @@ vim.keymap.set("n", "<leader>fe", ":NvimTreeFindFile<CR>", { desc = "[F]ind in [
 local dap = require("dap")
 -- Helper function to make defining keymaps cleaner
 local function map(mode, lhs, rhs, desc)
-  vim.keymap.set(mode, lhs, rhs, { silent = true, desc = "DAP: " .. desc })
+	vim.keymap.set(mode, lhs, rhs, { silent = true, desc = "DAP: " .. desc })
 end
 
 -- ==========================================
@@ -527,7 +573,7 @@ map("n", "<leader>dc", dap.clear_breakpoints, "Clear All Breakpoints")
 -- ==========================================
 -- Hover over a variable (like a Vector3 or Matrix) to see its current value instantly
 map("n", "<leader>dh", function()
-  require("dap.ui.widgets").hover()
+	require("dap.ui.widgets").hover()
 end, "Hover Variable Value")
 
 dap.adapters.python = function(callback, config)
@@ -541,21 +587,21 @@ dap.adapters.python = function(callback, config)
 end
 
 dap.configurations.python = {
-  {
-    type = 'python',
-    request = 'launch',
-    name = "Launch Current File (Active Venv)",
-    program = "${file}",
-    pythonPath = function()
-      local cwd = vim.fn.getcwd()
-      if vim.fn.executable(cwd .. '/.venv/bin/python') == 1 then
-        return cwd .. '/.venv/bin/python'
-      else
-        return "/usr/bin/python3"
-      end
-    end,
-    console = "externalTerminal",
-  },
+	{
+		type = "python",
+		request = "launch",
+		name = "Launch Current File (Active Venv)",
+		program = "${file}",
+		pythonPath = function()
+			local cwd = vim.fn.getcwd()
+			if vim.fn.executable(cwd .. "/.venv/bin/python") == 1 then
+				return cwd .. "/.venv/bin/python"
+			else
+				return "/usr/bin/python3"
+			end
+		end,
+		console = "externalTerminal",
+	},
 }
 
 -- Jumper: hop.nivm
@@ -586,33 +632,30 @@ vim.keymap.set({ "n" }, "<leader>fq", "<cmd>FloaTermQuickfix<CR>", { desc = "[F]
 -- local text_objects = require("custom.text_objects")
 --
 -- vim.keymap.set({ "x", "o" }, "ic", function()
--- 	text_objects.select_text_object("function_call")
+--  text_objects.select_text_object("function_call")
 -- end, { desc = "Select function call" })
 --
 -- vim.keymap.set({ "x", "o" }, "ac", function()
--- 	text_objects.select_text_object("function_call")
+--  text_objects.select_text_object("function_call")
 -- end, { desc = "Select function call" })
 --
 -- vim.keymap.set({ "x", "o" }, "if", function()
--- 	text_objects.select_text_object("function_inner")
+--  text_objects.select_text_object("function_inner")
 -- end, { desc = "Select inner arguments" })
 --
 -- vim.keymap.set({ "x", "o" }, "af", function()
--- 	text_objects.select_text_object("function_outer")
+--  text_objects.select_text_object("function_outer")
 -- end, { desc = "Select outer arguments" })
 --
 -- vim.keymap.set({ "x", "o" }, "ia", function()
--- 	text_objects.select_text_object("parameter_inner")
+--  text_objects.select_text_object("parameter_inner")
 -- end, { desc = "Select inner arguments" })
 --
 -- vim.keymap.set({ "x", "o" }, "aa", function()
--- 	text_objects.select_text_object("parameter_outer")
+--  text_objects.select_text_object("parameter_outer")
 -- end, { desc = "Select outer arguments" })
 --
--- vim.keymap.set("n", "<leader>rs", function()
--- 	vim.cmd("source %")
--- 	print("Sourced!")
--- end, { desc = "reload plugin" })
+vim.keymap.set("n", "<leader>rs", ":source %<CR>", { desc = "Source this file" })
 
 ---
 local function reload_picker()
@@ -699,4 +742,17 @@ local function reload_picker()
 end
 reload_picker()
 
-vim.keymap.set("n", "<leader>rp", reload_picker, { desc = "reload plugin" })
+local function load_multicursors()
+	package.loaded["custom.multicursors"] = nil
+
+	-- 2. Re-require and setup
+	local status, multicursors = pcall(require, "custom.multicursors")
+	if status then
+		multicursors.setup()
+	else
+		vim.notify("Failed to reload multicursors: " .. tostring(multicursors), vim.log.levels.ERROR)
+	end
+end
+load_multicursors()
+
+vim.keymap.set("n", "<leader>rp", load_multicursors, { desc = "reload plugin" })

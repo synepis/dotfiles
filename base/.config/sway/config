@@ -26,8 +26,8 @@ set $menu "wofi --show drun"
 font pango:Noto Sans Mono 13px 
 
 ### Output configuration
-set $wallpaper ~/Pictures/wallpapers/cafe.jpg
-#set $wallpaper ~/Pictures/background-green-forrest.jpg 
+#set $wallpaper ~/Pictures/wallpapers/cafe.jpg
+set $wallpaper ~/Pictures/background-green-forrest.jpg 
 output * bg $wallpaper fill
 
 # Work

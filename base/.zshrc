@@ -118,12 +118,15 @@ alias gcm="git commit -am"
 alias gco="git checkout"
 
 #Docker
-alias dup="docker-compose up"
-alias ddown="docker-compose down -v"
+alias dup="docker compose up"
+alias ddown="docker compose down -v"
 
 # Samba drive
 alias samba-on="sudo systemctl start smb nmb"
 alias samba-off="sudo systemctl stop smb nmb"
+
+# Local binaries
+export PATH=$PATH:$HOME/.local/bin
 
 # Golang
 export PATH=$PATH:/usr/local/go/bin
