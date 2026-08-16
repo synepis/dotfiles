@@ -144,8 +144,6 @@ local function resize_mode()
 	vim.wo[current_win].winhighlight = new_winhl
 	vim.cmd("redraw")
 
-    print(original_winhl)
-
 	-- Keybindings for resising
 	while true do
 		local char = vim.fn.getchar()
@@ -247,7 +245,12 @@ vim.pack.add({
 	{ src = "https://github.com/mfussenegger/nvim-dap" },
 	{ src = "https://github.com/igorlfs/nvim-dap-view", version = vim.version.range("1.*") },
 	{ src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" },
+	{ src = "https://github.com/NeogitOrg/neogit" },
 })
+
+-- Neogit
+local neogit = require("neogit")
+vim.keymap.set("n", "<leader>gg", neogit.open, { desc = "Open Neogit UI" })
 
 -- Treesitter
 -- Ensure basic parsers are installed
