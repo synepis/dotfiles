@@ -308,8 +308,8 @@ exec nm-applet
 for_window [app_id="org.gnome.Calculator"] floating enable
 
 # Gaps config
-gaps outer 2
-gaps inner 2
+# gaps outer 10 
+# gaps inner 2
 
 include /etc/sway/config.d/*
 

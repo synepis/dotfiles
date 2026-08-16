@@ -60,6 +60,7 @@ local state = {
 
 	labels_ns = vim.api.nvim_create_namespace("picker_labels"),
 	selection_ns = vim.api.nvim_create_namespace("picker_selection"),
+	misc_ns = vim.api.nvim_create_namespace("picker_misc"),
 	ac_group = vim.api.nvim_create_augroup("PickerInternal", { clear = true }),
 
 	is_open = false,
@@ -199,6 +200,8 @@ function I.setup_windows(opts)
 			style = "minimal",
 			border = "rounded",
 		})
+		I.setup_input_window_prefix(state.input_win, opts.input_prefix or ">")
+
 		vim.cmd("startinsert")
 	end
 
@@ -217,6 +220,12 @@ function I.setup_windows(opts)
 		vim.wo[state.preview_win].number = true
 		vim.wo[state.preview_win].cursorline = true
 	end
+end
+
+function I.setup_input_window_prefix(winid, prefix_text)
+	local safe_prefix = prefix_text:gsub("%%", "%%%%")
+	local statcol_str = string.format("%%#PickerInputPrefix#%s%%*", safe_prefix)
+	vim.api.nvim_set_option_value("statuscolumn", statcol_str, { win = winid })
 end
 
 function I.close_picker()
@@ -448,10 +457,10 @@ function I.render_preview()
 			vim.schedule(function()
 				vim.api.nvim_buf_set_lines(new_buf, 0, -1, false, lines)
 
-				local ft = vim.filetype.match({ filename = selection.filename })
+				local ft = vim.filetype.match({ buf = new_buf, filename = selection.filename })
 				if ft then
 					vim.bo[new_buf].filetype = ft
-					vim.bo[new_buf].syntax = "off"
+					vim.bo[new_buf].syntax = "on"
 				else
 					vim.bo[new_buf].filetype = ""
 					vim.bo[new_buf].syntax = "off"
@@ -790,6 +799,7 @@ function I.start_picker(opts)
 	I.setup_windows({
 		width = opts.width or 0.8,
 		height = opts.width or 0.8,
+		input_prefix = opts.input_prefix,
 		input_position = opts.input_position or "top",
 		preview_position = opts.preview_position or "bottom",
 	})
@@ -906,20 +916,6 @@ function M.find_buffers()
 			end,
 			["d"] = function(items)
 				for _, item in ipairs(items) do
-					-- We have to create a replacement scratch buffer if we are deleting the last buffer
-					local valid_buffers = vim.fn.getbufinfo({ buflisted = 1 })
-
-					if #valid_buffers <= 1 then
-						local scratch_buf = vim.api.nvim_create_buf(true, true)
-
-						vim.bo[scratch_buf].bufhidden = "wipe"
-
-						for _, win in ipairs(vim.api.nvim_list_wins()) do
-							if vim.api.nvim_win_get_buf(win) == item.bufnr then
-								vim.api.nvim_win_set_buf(win, scratch_buf)
-							end
-						end
-					end
 					vim.api.nvim_buf_delete(item.bufnr, {})
 				end
 				return false -- Don't close the picker on deletion of a buffer
@@ -928,13 +924,17 @@ function M.find_buffers()
 	})
 end
 
-function M.find_files()
+function M.find_files(path)
 	I.start_picker({
 		prompt = "Find Files",
+		input_prefix = path or (vim.uv.cwd() .. "/"),
 		input_position = "top",
 		preview_position = "bottom",
 		find_items = function(query, callback)
-			local shell_cmd = "fd --type f --hidden --no-ignore --max-results 1000 --exclude .git"
+			local shell_cmd = "fd --type f --hidden --max-results 1000"
+				.. " --exclude .git"
+				.. " --exclude src/dwm1001/dwm1001_bsp/lib/"
+				.. " --exclude __pycache__"
 			if query ~= "" then
 				shell_cmd = string.format("%s | fzf -f %s", shell_cmd, vim.fn.shellescape(query))
 			end
@@ -968,9 +968,10 @@ function M.find_files()
 	})
 end
 
-function M.live_grep()
+function M.live_grep(path)
 	I.start_picker({
 		prompt = "Live Grep",
+		input_prefix = path or (vim.uv.cwd() .. "/"),
 		input_position = "top",
 		preview_position = "bottom",
 		find_items = function(query, callback)
@@ -1327,6 +1328,7 @@ function I.setup_highlight_groups()
 		{ name = "PickerLabel", fg = "#dcd7ba" },
 		{ name = "PickerNumber", fg = "#d27e99" },
 		{ name = "PickerRegex", fg = "#ff9e3b" },
+		{ name = "PickerInputPrefix", fg = "#67bed9" },
 	}
 
 	for _, hl in ipairs(higlight_groups) do
@@ -1338,7 +1340,7 @@ function I.setup_highlight_groups()
 	end
 end
 
-function M.setup(config)
+function M.setup()
 	I.setup_highlight_groups()
 	print("Loaded picker")
 end

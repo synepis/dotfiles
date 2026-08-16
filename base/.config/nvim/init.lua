@@ -38,6 +38,11 @@ vim.opt.termguicolors = true
 -- Quick replace
 vim.keymap.set("n", "R", [[:%s/\<<C-r><C-w>\>/]], { desc = "Search and replace word under cursor" })
 
+-- Enable code folding
+vim.opt.foldmethod = "expr"
+vim.opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+vim.opt.foldlevel = 99
+
 -- Sync clipboard between OS and Neovim.
 vim.schedule(function()
 	vim.o.clipboard = "unnamedplus"
@@ -97,6 +102,10 @@ vim.keymap.set("n", "U", "<C-r>")
 
 -- Windows exchange/swap
 vim.keymap.set({ "n", "v" }, "<leader>wx", "<C-w>x")
+
+-- Enable the new VIM UI and hide the command line when not in use
+-- require("vim._core.ui2").enable()
+-- vim.opt.cmdheight = 0
 
 -- Custom winbar
 function _G.custom_winbar()
@@ -220,22 +229,6 @@ vim.api.nvim_create_autocmd("TermEnter", {
 	end,
 })
 
--- Setup Treesitter
-vim.api.nvim_create_autocmd("FileType", {
-	desc = "Enable native Treesitter features",
-	callback = function()
-		-- Safely try to start native treesitter highlighting for the filetype
-		local ok, _ = pcall(vim.treesitter.start)
-
-		-- If native treesitter successfully attached, configure folding too!
-		if ok then
-			vim.wo.foldmethod = "expr"
-			vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
-			vim.wo.foldlevel = 99 -- Don't automatically collapse all folds on open
-		end
-	end,
-})
-
 -- [[ Plugins ]]
 vim.pack.add({
 	{ src = "https://github.com/rebelot/kanagawa.nvim" },
@@ -250,9 +243,89 @@ vim.pack.add({
 	{ src = "https://github.com/nvim-mini/mini.pairs" },
 	{ src = "https://github.com/nvim-mini/mini.surround" },
 	{ src = "https://github.com/nvim-mini/mini.ai" },
+	{ src = "https://github.com/lewis6991/gitsigns.nvim" },
 	{ src = "https://github.com/mfussenegger/nvim-dap" },
+	{ src = "https://github.com/igorlfs/nvim-dap-view", version = vim.version.range("1.*") },
+	{ src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" },
 })
 
+-- Treesitter
+-- Ensure basic parsers are installed
+local parsers = {
+	"bash",
+	"c",
+	"cpp",
+	"diff",
+	"html",
+	"lua",
+	"luadoc",
+	"markdown",
+	"markdown_inline",
+	"query",
+	"vim",
+	"vimdoc",
+	"python",
+	"jinja",
+	"jinja_inline",
+}
+require("nvim-treesitter").install(parsers)
+
+---@param buf integer
+---@param language string
+local function treesitter_try_attach(buf, language)
+	-- Check if a parser exists and load it
+	if not vim.treesitter.language.add(language) then
+		return
+	end
+	-- Enable syntax highlighting and other treesitter features
+	local ok, _ = pcall(vim.treesitter.start, buf, language)
+	if not ok then
+		return
+	end
+
+	-- Enable treesitter based folds
+	-- For more info on folds see `:help folds`
+	-- vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+	-- vim.wo.foldmethod = 'expr'
+
+	-- Check if treesitter indentation is available for this language, and if so enable it
+	-- in case there is no indent query, the indentexpr will fallback to the vim's built in one
+	local has_indent_query = vim.treesitter.query.get(language, "indents") ~= nil
+
+	-- Enable treesitter based indentation
+	if has_indent_query then
+		vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+	end
+end
+
+local available_parsers = require("nvim-treesitter").get_available()
+vim.api.nvim_create_autocmd("FileType", {
+	callback = function(args)
+		local buf, filetype = args.buf, args.match
+
+		local language = vim.treesitter.language.get_lang(filetype)
+		if not language then
+			return
+		end
+
+		local installed_parsers = require("nvim-treesitter").get_installed("parsers")
+
+		if vim.tbl_contains(installed_parsers, language) then
+			-- Enable the parser if it is already installed
+			treesitter_try_attach(buf, language)
+		elseif vim.tbl_contains(available_parsers, language) then
+			-- If a parser is available in `nvim-treesitter`, auto-install it and enable it after the installation is done
+			require("nvim-treesitter").install(language):await(function()
+				treesitter_try_attach(buf, language)
+			end)
+		else
+			-- Try to enable treesitter features in case the parser exists but is not available from `nvim-treesitter`
+			treesitter_try_attach(buf, language)
+		end
+	end,
+})
+
+-- Mini
 require("mini.pairs").setup() -- Auto bracket pairing
 require("mini.surround").setup() -- Bracket surrounding
 local spec_treesitter = require("mini.ai").gen_spec.treesitter
@@ -346,7 +419,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
 		})
 		vim.keymap.set("n", "gh", vim.lsp.buf.hover, opts)
 		vim.keymap.set("n", "ge", vim.diagnostic.open_float, { desc = "[G]oto [E]errors" })
-		vim.keymap.set("n", "gH", vim.lsp.buf.signature_help, { desc = "[G]oto signature [H]elp" })
+		vim.keymap.set("n", "gh", vim.lsp.buf.signature_help, { desc = "[G]oto signature [H]elp" })
 		vim.keymap.set("i", "<C-k>", vim.lsp.buf.signature_help, { desc = "[G]oto signature [H]elp" })
 		vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
 	end,
@@ -391,6 +464,45 @@ vim.lsp.config("pyright", {
 	filetypes = { "python" },
 	root_markers = { ".git", "pyproject.toml", "setup.py", "requirements.txt" },
 	capabilities = blink.get_lsp_capabilities(),
+	settings = {
+		python = {
+			analysis = {
+				autoSearchPaths = true,
+				useLibraryCodeForTypes = true,
+				diagnosticMode = "openFilesOnly", -- or "workspace"
+				typeCheckingMode = "standard", -- "off" by default, set to "standard" or "strict" for error highlights!
+			},
+		},
+	},
+	handlers = {
+		-- Override the default rename handler to remove the `annotationId` from edits.
+		--
+		-- Pyright is being non-compliant here by returning `annotationId` in the edits, but not
+		-- populating the `changeAnnotations` field in the `WorkspaceEdit`. This causes Neovim to
+		-- throw an error when applying the workspace edit.
+		--
+		-- See:
+		-- - https://github.com/neovim/neovim/issues/34731
+		-- - https://github.com/microsoft/pyright/issues/10671
+		[vim.lsp.protocol.Methods.textDocument_rename] = function(err, result, ctx)
+			if err then
+				vim.notify("Pyright rename failed: " .. err.message, vim.log.levels.ERROR)
+				return
+			end
+
+			---@cast result lsp.WorkspaceEdit
+			for _, change in ipairs(result.documentChanges or {}) do
+				for _, edit in ipairs(change.edits or {}) do
+					if edit.annotationId then
+						edit.annotationId = nil
+					end
+				end
+			end
+
+			local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
+			vim.lsp.util.apply_workspace_edit(result, client.offset_encoding)
+		end,
+	},
 })
 vim.lsp.enable("pyright")
 
@@ -415,6 +527,31 @@ vim.lsp.config("tinymist", {
 	},
 })
 vim.lsp.enable("tinymist")
+
+vim.lsp.config("html", {
+	cmd = { mason_bin .. "vscode-html-language-server", "--stdio" },
+	filetypes = { "html", "jinja" }, -- Add "jinja" here
+	root_markers = { ".git" },
+	init_options = {
+		provideFormatter = true,
+		embeddedLanguages = {
+			css = true,
+			javascript = true,
+		},
+		configurationSection = { "html", "css", "javascript" },
+	},
+	capabilities = blink.get_lsp_capabilities(),
+})
+vim.lsp.enable("html")
+
+vim.lsp.config("ts_ls", {
+	cmd = { mason_bin .. "typescript-language-server", "--stdio" },
+	filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "jinja" },
+	root_markers = { "package.json", "tsconfig.json", "jsconfig.json", ".git" },
+	capabilities = blink.get_lsp_capabilities(),
+})
+vim.lsp.enable("ts_ls")
+
 --
 -- Color Scheme
 require("kanagawa").setup()
@@ -425,9 +562,14 @@ vim.cmd.colorscheme("kanagawa")
 require("conform").setup({
 	formatters_by_ft = {
 		lua = { "stylua" },
-		python = { "black" },
+		python = { "ruff_organize_imports", "ruff_format" },
+		html = { "prettier" },
+		css = { "prettier" },
 		javascript = { "prettier" },
 		markdown = { "prettier" },
+		typescript = { "prettier" },
+		jinja = { "djlint" },
+		sql = { "sql_formatter" },
 	},
 	formatters = {
 		prettier = {
@@ -444,8 +586,16 @@ require("conform").setup({
 				}
 			end,
 		},
+		djlint = {
+			prepend_args = {
+				"--line-break-after-multiline-tag",
+				"--max-attribute-length",
+				"3",
+			},
+		},
 	},
 })
+
 vim.keymap.set("n", "<leader>cf", function()
 	require("conform").format({
 		lsp_format = "fallback",
@@ -576,6 +726,9 @@ map("n", "<leader>dh", function()
 	require("dap.ui.widgets").hover()
 end, "Hover Variable Value")
 
+-- local dapui = require("dapui")
+-- map("n", "<leader>du", dapui.toggle, "[D]ebug [U]I Toggle")
+
 dap.adapters.python = function(callback, config)
 	if config.request == "launch" then
 		callback({
@@ -615,7 +768,14 @@ hop.setup({
 
 -- Test Cases: camelCase test_PascalCase snake_case 0.12 -0.23 A AA       b  b 1 123
 vim.keymap.set({ "n", "v", "o" }, ";", function()
-	hop.hint_patterns({}, "\\v[a-z]+|[A-Z]+|[A-Z][A-Z]+|[A-Z][a-z]+|[0-9][0-9\\.]+")
+	hop.hint_patterns({
+		callback = function(target)
+			print("blah")
+			if target == " " then
+				hop.hint_lines()
+			end
+		end,
+	}, "\\v[a-z]+|[A-Z]+|[A-Z][A-Z]+|[A-Z][a-z]+|[0-9][0-9\\.]+")
 end, { desc = "Hop Word" })
 vim.keymap.set({ "n", "v", "o" }, "<leader>;l", hop.hint_lines, { desc = "Hop Word" })
 vim.keymap.set({ "n", "v", "o" }, "<leader>;n", hop_treesitter.hint_nodes, { desc = "Hop Node" })
@@ -658,20 +818,14 @@ vim.keymap.set({ "n" }, "<leader>fq", "<cmd>FloaTermQuickfix<CR>", { desc = "[F]
 vim.keymap.set("n", "<leader>rs", ":source %<CR>", { desc = "Source this file" })
 
 ---
-local function reload_picker()
+local function load_picker_plugin()
 	-- 1. Clear the cached module so Neovim looks at the file on disk again
 	package.loaded["custom.picker"] = nil
 
 	-- 2. Re-require and setup
 	local status, picker = pcall(require, "custom.picker")
 	if status then
-		picker.setup({
-			width = 0.8,
-			height = 0.8,
-			input_position = "top",
-			preview_position = "none",
-		})
-
+		picker.setup()
 		vim.keymap.set("n", "<leader>ft", function()
 			require("custom.picker").ui_select({
 				"Apples",
@@ -728,7 +882,7 @@ local function reload_picker()
 			require("custom.picker").find_buffers()
 		end, { desc = "[F]ind [O]pen Buffers" })
 
-		vim.keymap.set("n", "<leader>fr", function()
+		vim.keymap.set("n", "<leader>fu", function()
 			require("custom.picker").find_references()
 		end, { desc = "[F]ind [U]sages" })
 
@@ -740,19 +894,43 @@ local function reload_picker()
 		vim.notify("Failed to reload picker: " .. tostring(picker), vim.log.levels.ERROR)
 	end
 end
-reload_picker()
+load_picker_plugin()
 
-local function load_multicursors()
-	package.loaded["custom.multicursors"] = nil
+-- Custom Status Line
+local function load_statustline_plugin()
+	package.loaded["custom.statusline"] = nil
 
-	-- 2. Re-require and setup
-	local status, multicursors = pcall(require, "custom.multicursors")
+	local status, statusline = pcall(require, "custom.statusline")
 	if status then
-		multicursors.setup()
+		statusline.setup()
 	else
-		vim.notify("Failed to reload multicursors: " .. tostring(multicursors), vim.log.levels.ERROR)
+		vim.notify("Failed to reload picker: " .. tostring(statusline), vim.log.levels.ERROR)
 	end
 end
-load_multicursors()
+load_statustline_plugin()
 
-vim.keymap.set("n", "<leader>rp", load_multicursors, { desc = "reload plugin" })
+vim.keymap.set("n", "<leader>rp", load_statustline_plugin, { desc = "reload plugin" })
+
+-- Typst and Zathura utility
+vim.keymap.set("n", "<leader>rt", function()
+	local file = vim.api.nvim_buf_get_name(0)
+
+	if not file:match("%.typ$") then
+		vim.notify("Current buffer is not a .typ file", vim.log.levels.WARN)
+		return
+	end
+
+	local pdf = file:gsub("%.typ$", ".pdf")
+
+	local file_esc = vim.fn.shellescape(file)
+	local pdf_esc = vim.fn.shellescape(pdf)
+
+	-- Run typst watch to live-update the pdf
+	-- Run zathura to render the pdf
+	-- Make sure when zathura is closed the typst watch is also closed
+	local cmd = string.format("typst watch %s & PID=$! ; zathura %s ; kill $PID", file_esc, pdf_esc)
+
+	vim.fn.jobstart({ "sh", "-c", cmd }, { detach = true })
+
+	vim.notify("Started Typst & Zathura", vim.log.levels.INFO)
+end, { desc = "[R]un [T]ypst watch and Zathura" })

@@ -1,0 +1,23 @@
+set adjust-open "width"
+
+# Use system clipboard
+set selection-clipboard clipboard
+
+# Page navigation
+map J navigate next
+map K navigate previous
+
+map H scroll full-left
+map L scroll full-right
+
+# Navigate the Table of Contents / Index with Ctrl-j and Ctrl-k
+map [index] <C-j> navigate_index down
+map [index] <C-k> navigate_index up
+
+# Zoom bindings
+map I zoom in
+map O zoom out
+
+# Fit-to-width binding
+map w adjust_window width
+
