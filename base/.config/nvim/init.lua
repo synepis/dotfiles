@@ -245,12 +245,7 @@ vim.pack.add({
 	{ src = "https://github.com/mfussenegger/nvim-dap" },
 	{ src = "https://github.com/igorlfs/nvim-dap-view", version = vim.version.range("1.*") },
 	{ src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" },
-	{ src = "https://github.com/NeogitOrg/neogit" },
 })
-
--- Neogit
-local neogit = require("neogit")
-vim.keymap.set("n", "<leader>gg", neogit.open, { desc = "Open Neogit UI" })
 
 -- Treesitter
 -- Ensure basic parsers are installed
@@ -509,6 +504,15 @@ vim.lsp.config("pyright", {
 })
 vim.lsp.enable("pyright")
 
+-- LSP: Zig (zls)
+vim.lsp.config("zls", {
+	cmd = { mason_bin .. "zls" },
+	filetypes = { "zig", "zir" },
+	root_markers = { "build.zig", "build.zig.zon", ".git" },
+	capabilities = blink.get_lsp_capabilities(),
+})
+vim.lsp.enable("zls")
+
 -- LSP: Go (gopls)
 vim.lsp.config("gopls", {
 	cmd = { mason_bin .. "gopls" },
@@ -596,6 +600,7 @@ require("conform").setup({
 				"3",
 			},
 		},
+		zig = { "zigfmt" },
 	},
 })
 
@@ -763,14 +768,14 @@ dap.configurations.python = {
 -- Jumper: hop.nivm
 local hop = require("hop")
 local hop_treesitter = require("hop-treesitter")
+
 hop.setup({
-	-- keys = "etovxqpdygfblzhckisuran", -- Customize your hinting keys here
 	keys = "wertyuiopasdfghjklcvnmx", -- Customize your hinting keys here
 	multi_windows = true,
 })
 
 -- Test Cases: camelCase test_PascalCase snake_case 0.12 -0.23 A AA       b  b 1 123
-vim.keymap.set({ "n", "v", "o" }, ";", function()
+local function hop_word_pattern()
 	hop.hint_patterns({
 		callback = function(target)
 			print("blah")
@@ -779,9 +784,58 @@ vim.keymap.set({ "n", "v", "o" }, ";", function()
 			end
 		end,
 	}, "\\v[a-z]+|[A-Z]+|[A-Z][A-Z]+|[A-Z][a-z]+|[0-9][0-9\\.]+")
-end, { desc = "Hop Word" })
-vim.keymap.set({ "n", "v", "o" }, "<leader>;l", hop.hint_lines, { desc = "Hop Word" })
-vim.keymap.set({ "n", "v", "o" }, "<leader>;n", hop_treesitter.hint_nodes, { desc = "Hop Node" })
+end
+
+local function hop_word_or_line_or_node()
+	local start_pos = vim.api.nvim_win_get_cursor(0)
+	hop_word_pattern()
+	local end_pos = vim.api.nvim_win_get_cursor(0)
+	local jumped = start_pos[1] ~= end_pos[1] or start_pos[2] ~= end_pos[2]
+
+	-- If we havent' jumped and there is a queued key (not consumed by hop)
+	if not jumped and vim.fn.getchar(1) ~= 0 then
+		local c = vim.fn.getchar()
+		local key = type(c) == "number" and vim.fn.nr2char(c) or c
+
+		if key == ";" then
+			vim.cmd("redraw")
+			hop.hint_lines()
+		elseif key == ":" then
+			vim.cmd("redraw")
+			hop_treesitter.hint_nodes()
+		else
+			-- not our trigger key — put it back so it behaves
+			-- exactly as if Hop's own cancel had handed it off normally
+			vim.fn.feedkeys(key, "n")
+		end
+	end
+end
+
+vim.keymap.set({ "n", "v", "o" }, ";", hop_word_or_line_or_node, { desc = "Hop Words (;; for Lines) (;: for nodes)" })
+-- -- Jumper: hop.nivm
+-- --
+-- local hop = require("hop")
+-- local hop_treesitter = require("hop-treesitter")
+-- hop.setup({
+-- 	keys = "wertyuiopasdfghjklcvnmx", -- Customize your hinting keys here
+-- 	multi_windows = true,
+-- })
+--
+-- vim.keymap.set({ "n", "v", "o" }, ";", hop.hint_words, {desc = "Hop Words"})
+
+-- -- Test Cases: camelCase test_PascalCase snake_case 0.12 -0.23 A AA       b  b 1 123
+-- vim.keymap.set({ "n", "v", "o" }, ";", function()
+-- 	hop.hint_patterns({
+-- 		callback = function(target)
+-- 			print("blah")
+-- 			if target == " " then
+-- 				hop.hint_lines()
+-- 			end
+-- 		end,
+-- 	}, "\\v[a-z]+|[A-Z]+|[A-Z][A-Z]+|[A-Z][a-z]+|[0-9][0-9\\.]+")
+-- end, { desc = "Hop Word" })
+-- vim.keymap.set({ "n", "v", "o" }, "<leader>;l", hop.hint_lines, { desc = "Hop Word" })
+-- vim.keymap.set({ "n", "v", "o" }, "<leader>;n", hop_treesitter.hint_nodes, { desc = "Hop Node" })
 
 -- Floating terminal (custom)
 require("custom.floaterm").setup()
@@ -899,6 +953,8 @@ local function load_picker_plugin()
 end
 load_picker_plugin()
 
+vim.keymap.set("n", "<leader>rp", load_picker_plugin, { desc = "reload plugin" })
+
 -- Custom Status Line
 local function load_statustline_plugin()
 	package.loaded["custom.statusline"] = nil
@@ -911,8 +967,6 @@ local function load_statustline_plugin()
 	end
 end
 load_statustline_plugin()
-
-vim.keymap.set("n", "<leader>rp", load_statustline_plugin, { desc = "reload plugin" })
 
 -- Typst and Zathura utility
 vim.keymap.set("n", "<leader>rt", function()
@@ -937,3 +991,4 @@ vim.keymap.set("n", "<leader>rt", function()
 
 	vim.notify("Started Typst & Zathura", vim.log.levels.INFO)
 end, { desc = "[R]un [T]ypst watch and Zathura" })
+

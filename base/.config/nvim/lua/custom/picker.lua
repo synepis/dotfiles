@@ -96,7 +96,7 @@ local state = {
 	-- Async support for external tools (e.g. `fzf`)
 	uv = vim.uv,
 	debounce_timer = vim.uv.new_timer(),
-	shell_cmd_job = nil,
+	shell_cmd_pid = nil,
 }
 
 function I.setup_windows(opts)
@@ -325,12 +325,11 @@ function I.accept_selection(action)
 
 		if action_handler and #items > 0 then
 			should_close = action_handler(items)
+			should_refresh = true
 		end
 	else
 		local selected = state.results[state.selected_idx]
 		local action_handler = state.on_action and state.on_action[action]
-
-		debug_log(state.selected_idx)
 
 		if selected and action_handler then
 			local item = selected
@@ -347,6 +346,7 @@ function I.accept_selection(action)
 		vim.cmd("stopinsert")
 		I.close_picker()
 	elseif should_refresh then
+		debug_log("About to refresh")
 		I.run_search() -- We refresh if any action was made
 	end
 end
@@ -637,10 +637,14 @@ end
 
 function I.run_search()
 	state.run_count = state.run_count + 1
+	local run_count = state.run_count
 
 	local query = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)[1] or ""
 
 	state.find_items(query, function(items)
+		if run_count ~= state.run_count then
+			return
+		end
 		state.items = items
 		state.filter_items(items, query, function(filtered)
 			state.results = filtered
@@ -915,10 +919,39 @@ function M.find_buffers()
 				return true
 			end,
 			["d"] = function(items)
+				-- Buffers being deleted can't be used as replacements
+				local deleting = {}
 				for _, item in ipairs(items) do
-					vim.api.nvim_buf_delete(item.bufnr, {})
+					deleting[item.bufnr] = true
 				end
-				return false -- Don't close the picker on deletion of a buffer
+
+				local function find_replacement()
+					for _, b in ipairs(vim.api.nvim_list_bufs()) do
+						if not deleting[b] and vim.bo[b].buflisted and vim.api.nvim_buf_is_loaded(b) then
+							return b
+						end
+					end
+					return vim.api.nvim_create_buf(true, false) -- nothing left, use an empty buffer
+				end
+
+				for _, item in ipairs(items) do
+					local bufnr = item.bufnr
+					if vim.api.nvim_buf_is_valid(bufnr) then
+						-- Swap the buffer out of any normal (non-floating) window first
+						for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+							if vim.api.nvim_win_get_config(win).relative == "" then
+								vim.api.nvim_win_set_buf(win, find_replacement())
+							end
+						end
+
+						local ok, err = pcall(vim.api.nvim_buf_delete, bufnr, {})
+						if not ok then
+							vim.notify(err, vim.log.levels.WARN, { title = "Picker" })
+						end
+					end
+				end
+				debug_log("deleted buffers")
+				return false -- keep the picker open
 			end,
 		},
 	})
@@ -1342,7 +1375,6 @@ end
 
 function M.setup()
 	I.setup_highlight_groups()
-	print("Loaded picker")
 end
 
 --- Reads a file asynchronously
@@ -1374,44 +1406,75 @@ function I.read_file(filename, callback)
 	end)
 end
 
+function I.kill_shell_cmd()
+	if state.shell_cmd_pid then
+		-- Negative pid = the whole process group (sh + fd + fzf ...)
+		pcall(vim.uv.kill, -state.shell_cmd_pid, 15)
+		state.shell_cmd_pid = nil
+	end
+end
+
 --- Runs a shell command asynchronously
 ---@param cmd string
 ---@param callback fun(lines: string[])
 function I.run_shell_cmd(cmd, callback)
-	if state.shell_cmd_job then
-		pcall(state.uv.kill, state.shell_cmd_job, 15)
-		state.shell_cmd_job = nil
-	end
+	I.kill_shell_cmd()
 
 	local stdout = vim.uv.new_pipe(false)
-	local output_chunks = {}
+	local chunks = {}
+	local run_count = state.run_count
+	local exited, eof = false, false
+	local handle, pid
 
-	state.shell_cmd_job, _ = vim.uv.spawn("sh", {
-		args = { "-c", cmd },
-		stdio = { nil, stdout, nil },
-	}, function()
-		if stdout then
-			stdout:read_stop()
+	local function finish()
+		if not (exited and eof) then
+			return
+		end
+		if not stdout:is_closing() then
 			stdout:close()
 		end
+		if run_count ~= state.run_count then
+			return
+		end
 
-		local output = table.concat(output_chunks) -- Concat all results into a single string
 		local lines = {}
-		for line in string.gmatch(output, "[^\r\n]+") do
+		for line in table.concat(chunks):gmatch("[^\r\n]+") do
 			table.insert(lines, line)
 		end
+		callback(lines)
+	end
 
-		if callback then
-			callback(lines)
+	handle, pid = vim.uv.spawn("sh", {
+		args = { "-c", cmd },
+		stdio = { nil, stdout, nil },
+		detached = true, -- own process group, so kill_shell_cmd can kill the pipeline
+	}, function()
+		handle:close()
+		if state.shell_cmd_pid == pid then
+			state.shell_cmd_pid = nil
+		end
+		exited = true
+		finish()
+	end)
+
+	if not handle then
+		stdout:close()
+		local err = pid -- on failure the second return value is the error message
+		vim.schedule(function()
+			vim.notify("Picker: failed to spawn shell: " .. tostring(err), vim.log.levels.ERROR)
+		end)
+		return
+	end
+	state.shell_cmd_pid = pid
+
+	stdout:read_start(function(_, data)
+		if data then
+			table.insert(chunks, data)
+		else
+			eof = true -- nil data means EOF (or a read error)
+			finish()
 		end
 	end)
-	if stdout then
-		vim.uv.read_start(stdout, function(_, data)
-			if data then
-				table.insert(output_chunks, data)
-			end
-		end)
-	end
 end
 
 return M

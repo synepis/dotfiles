@@ -1,0 +1,13 @@
+[core]
+    pager = delta
+	excludesfiles = ~/.gitignore_global
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true
+    dark = true
+[merge]
+    conflictStyle = zdiff3
+[user]
+    name = "Your Name"
+    email = your.name@email.com

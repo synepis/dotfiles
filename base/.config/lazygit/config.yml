@@ -1,0 +1,25 @@
+gui:
+  theme:
+    activeBorderColor:
+     - green
+     - bold
+    showIcons: true
+git:
+  diffRenderers:
+    - name: "Side by side"
+      colorArg: always
+      command: delta --dark --paging=never --side-by-side
+    - name: "Unified"
+      colorArg: always
+      command: delta --dark --paging=never
+  commit:
+    signOff: false
+  log:
+    showGraph: always
+keybinding:
+  universal:
+    quit: 'q'
+    return: '<esc>'
+    cycleDiffRenderers: '<ctrl+p>'
+    nextPage: 'J'
+    prevPage: 'K'

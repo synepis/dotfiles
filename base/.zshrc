@@ -108,6 +108,11 @@ alias ls='ls --color=auto'
 alias ll='ls -lah'
 alias vim='nvim'
 
+# mkcd
+mkcd() {
+    mkdir -p "$1" && cd "$1"
+}
+
 # Git
 alias gs="git status"
 alias gp="git pull"
