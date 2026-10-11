@@ -35,38 +35,67 @@ local function get_buf_icon(bufnr)
 	return "📄"
 end
 
+local sep_left = vim.fn.nr2char(0xE0BC)
+local sep_right = vim.fn.nr2char(0xE0B8)
+
 local function create_tabline_buffer(buffer)
 	local buf_icon = get_buf_icon(buffer.bufnr)
 	local buf_name = buffer.name
 	local jump_label = buffer.jump_label or " "
 	local hl_group = "Default"
+	local sel_left_hl_group = "Default"
+	local sel_right_hl_group = "Default"
+	local modified = ""
 
 	if buffer.bufnr == vim.api.nvim_get_current_buf() then
 		hl_group = "TablineActive"
-		-- buf_name = "%#TablineActive#" .. buffer.name .. "%*"
+		sel_left_hl_group = "TablineSepActiveLeft"
+		sel_right_hl_group = "TablineSepActiveRight"
+	else
+		hl_group = "TablineInactive"
+		sel_left_hl_group = "TablineSepInactiveLeft"
+		sel_right_hl_group = "TablineSepInactiveRight"
+	end
+
+	if vim.bo[buffer.bufnr].modified then
+		modified = " ●"
 	end
 
 	local chunks = {
 		"%#",
+		sel_left_hl_group,
+		"#",
+		sep_left,
+		"%*",
+		"%#",
 		hl_group,
-		"#| ",
+		"#",
 		state.jump_mode and jump_label or "",
 		not state.jump_mode and buf_icon or "",
 		" ",
 		buf_name,
-		" %*",
+		modified,
+		"%*",
+		"%#",
+		sel_right_hl_group,
+		"#",
+		sep_right,
+		-- "%*",
 	}
 
 	return table.concat(chunks)
 end
 
+--
 -- Refresh the tabline after an event happened
 local function create_tab_line()
 	local tabline = {}
 	for _, buf in ipairs(state.buffers) do
+		local is_active = buf.bufnr == vim.api.nvim_get_current_buf()
+
 		table.insert(tabline, create_tabline_buffer(buf))
 	end
-	state.tabline = " " .. table.concat(tabline)
+	state.tabline = table.concat(tabline)
 end
 
 -- Returns the cached tabline for speed
@@ -118,9 +147,30 @@ local function release_jump_label(jump_label)
 end
 
 local function setup_highlight_groups()
-	-- vim.api.nvim_set_hl(0, "TablineActive", { fg = "#1e1e2e", bg = "#89b4fa", bold = true })
-	vim.api.nvim_set_hl(0, "TablineActive", { fg = "#f4b658", bg = "#444666", bold = true })
-	vim.api.nvim_set_hl(0, "TablineInactive", { fg = "#1e1e2e", bg = "#a6e3a1", bold = true })
+	-- local colors = {
+	-- 	bg = "#202020",
+	-- 	inactive = { fg = "#7982a9", bg = "#292e42" },
+	-- 	active = { fg = "#1a1b26", bg = "#7aa2f7" },
+	-- }
+	local colors = {
+		bg = "#363646",
+		inactive = { fg = "#7982a9", bg = "#292e42" },
+		active = { fg = "#1a1b26", bg = "#7aa2f7" },
+	}
+	--
+	--
+	-- local colors = {
+	-- 	bg = "#000000",
+	-- 	inactive = { fg = "#727169", bg = "#2A2A37" }, -- fujiGray on sumiInk4
+	-- 	active = { fg = "#16161D", bg = "#89b4fa" }, -- sumiInk0 on crystalBlue
+	-- }
+
+	vim.api.nvim_set_hl(0, "TablineActive", colors.active)
+	vim.api.nvim_set_hl(0, "TablineInactive", colors.inactive)
+	vim.api.nvim_set_hl(0, "TablineSepActiveLeft", { bg = colors.active.bg, fg = colors.bg })
+	vim.api.nvim_set_hl(0, "TablineSepInactiveLeft", { bg = colors.inactive.bg, fg = colors.bg })
+	vim.api.nvim_set_hl(0, "TablineSepActiveRight", { fg = colors.active.bg, bg = colors.bg })
+	vim.api.nvim_set_hl(0, "TablineSepInactiveRight", { fg = colors.inactive.bg, bg = colors.bg })
 end
 
 local function setup_auto_commands()
@@ -151,6 +201,13 @@ local function setup_auto_commands()
 			if deleted then
 				release_jump_label(deleted.jump_label)
 			end
+			create_tab_line()
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("BufModifiedSet", {
+		group = state.autogroup,
+		callback = function()
 			create_tab_line()
 		end,
 	})
