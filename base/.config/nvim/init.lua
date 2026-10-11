@@ -35,6 +35,8 @@ vim.o.confirm = true
 
 vim.opt.termguicolors = true
 
+vim.o.showtabline = 2
+
 -- Quick replace
 vim.keymap.set("n", "R", [[:%s/\<<C-r><C-w>\>/]], { desc = "Search and replace word under cursor" })
 
@@ -103,26 +105,30 @@ vim.keymap.set("n", "U", "<C-r>")
 -- Windows exchange/swap
 vim.keymap.set({ "n", "v" }, "<leader>wx", "<C-w>x")
 
+
+-- Easier bdelete
+vim.keymap.set({ "n", "v" }, "<leader>x", ":bdelete<CR>")
+
 -- Enable the new VIM UI and hide the command line when not in use
 -- require("vim._core.ui2").enable()
 -- vim.opt.cmdheight = 0
 
 -- Custom winbar
-function _G.custom_winbar()
-	local filename = vim.fn.expand("%:t")
-	local modified = vim.bo.modified and "[+]" or ""
-
-	local hl = ""
-	if vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin) then
-		hl = "%#StatulLine#"
-	else
-		hl = "%#StatusLineNC#"
-	end
-
-	return hl .. " %f" .. modified .. "%*" -- %t is filename, %* resets the highlight
-end
-
-vim.opt.winbar = "%{%v:lua.custom_winbar()%}"
+-- function _G.custom_winbar()
+-- 	local filename = vim.fn.expand("%:t")
+-- 	local modified = vim.bo.modified and "[+]" or ""
+--
+-- 	local hl = ""
+-- 	if vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin) then
+-- 		hl = "%#StatulLine#"
+-- 	else
+-- 		hl = "%#StatusLineNC#"
+-- 	end
+--
+-- 	return hl .. " %f" .. modified .. "%*" -- %t is filename, %* resets the highlight
+-- end
+--
+-- vim.opt.winbar = "%{%v:lua.custom_winbar()%}"
 
 -- Window resizing
 local function resize_mode()
@@ -601,6 +607,14 @@ require("conform").setup({
 			},
 		},
 		zig = { "zigfmt" },
+		sql_formatter = {
+			args = {
+				"--language",
+				"sqlite",
+				"--config",
+				'{"keywordCase":"upper"}',
+			},
+		},
 	},
 })
 
@@ -967,6 +981,28 @@ local function load_statustline_plugin()
 	end
 end
 load_statustline_plugin()
+
+vim.keymap.set("n", "<leader>rp", load_statustline_plugin, { desc = "reload plugin" })
+
+-- Custom Tab Line
+local function load_tabline_plugin()
+	package.loaded["custom.tabline"] = nil
+
+	local status, tabline = pcall(require, "custom.tabline")
+	if status then
+		tabline.setup()
+
+		vim.keymap.set("n", "<leader>tl", tabline.open_next_buffer, { desc = "[T]ab Next" })
+		vim.keymap.set("n", "<leader>th", tabline.open_prev_buffer, { desc = "[T]ab Prev" })
+		vim.keymap.set("n", "<leader>tj", tabline.jump_mode, { desc = "[T]ab [J]ump Mode" })
+		vim.keymap.set("n", "<leader>;", tabline.jump_mode, { desc = "[T]ab [J]ump Mode" })
+	else
+		vim.notify("Failed to reload tabline: " .. tostring(tabline), vim.log.levels.ERROR)
+	end
+end
+load_tabline_plugin()
+
+vim.keymap.set("n", "<leader>rp", load_tabline_plugin, { desc = "reload plugin" })
 
 -- Typst and Zathura utility
 vim.keymap.set("n", "<leader>rt", function()
