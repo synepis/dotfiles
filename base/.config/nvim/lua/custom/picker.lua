@@ -873,6 +873,7 @@ function I.open_first_item(items)
 	local win = state.original_win or 0
 
 	if item.bufnr then
+		vim.bo[item.bufnr].buflisted = true
 		vim.api.nvim_win_set_buf(win, item.bufnr)
 		vim.api.nvim_win_set_cursor(win, { item.row, item.col })
 	elseif item.filename then

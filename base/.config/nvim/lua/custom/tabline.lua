@@ -173,6 +173,34 @@ local function setup_highlight_groups()
 	vim.api.nvim_set_hl(0, "TablineSepInactiveRight", { fg = colors.inactive.bg, bg = colors.bg })
 end
 
+local function add_buffer(bufnr)
+	if find_buffer(bufnr) or not is_relevant_buffer(bufnr) then
+		return
+	end
+	local filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+	table.insert(state.buffers, {
+		bufnr = bufnr,
+		name = filename,
+		jump_label = acquire_jump_label(),
+	})
+end
+
+local function sync_buffers()
+	-- drop buffers that are gone or got unlisted
+	for i = #state.buffers, 1, -1 do
+		local b = state.buffers[i]
+		if not vim.api.nvim_buf_is_valid(b.bufnr) or not vim.bo[b.bufnr].buflisted then
+			release_jump_label(b.jump_label)
+			table.remove(state.buffers, i)
+		end
+	end
+	-- pick up newly listed ones (keeps existing order, appends new)
+	for _, bufnr in ipairs(get_buffers()) do
+		add_buffer(bufnr)
+	end
+	create_tab_line()
+end
+
 local function setup_auto_commands()
 	vim.api.nvim_create_autocmd("BufEnter", {
 		group = state.autogroup,
@@ -181,13 +209,7 @@ local function setup_auto_commands()
 			local existing, _ = find_buffer(bufnr)
 
 			if not existing and is_relevant_buffer(bufnr) then
-				local full_filename = vim.api.nvim_buf_get_name(bufnr)
-				local filename = vim.fn.fnamemodify(full_filename, ":t")
-				table.insert(state.buffers, {
-					bufnr = bufnr,
-					name = filename,
-					jump_label = acquire_jump_label(),
-				})
+				add_buffer(bufnr)
 			end
 			create_tab_line()
 		end,
@@ -211,6 +233,14 @@ local function setup_auto_commands()
 			create_tab_line()
 		end,
 	})
+
+	vim.api.nvim_create_autocmd("OptionSet", {
+		group = state.autogroup,
+		pattern = "buflisted",
+		callback = function()
+			vim.schedule(sync_buffers)
+		end,
+	})
 end
 
 local function init()
@@ -218,13 +248,7 @@ local function init()
 
 	local buffers = get_buffers()
 	for _, bufnr in ipairs(buffers) do
-		local full_filename = vim.api.nvim_buf_get_name(bufnr)
-		local filename = vim.fn.fnamemodify(full_filename, ":t")
-		table.insert(state.buffers, {
-			bufnr = bufnr,
-			name = filename,
-			jump_label = acquire_jump_label(),
-		})
+		add_buffer(bufnr)
 	end
 end
 
