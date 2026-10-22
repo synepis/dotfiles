@@ -105,7 +105,6 @@ vim.keymap.set("n", "U", "<C-r>")
 -- Windows exchange/swap
 vim.keymap.set({ "n", "v" }, "<leader>wx", "<C-w>x")
 
-
 -- Easier bdelete
 vim.keymap.set({ "n", "v" }, "<leader>x", ":bdelete<CR>")
 
@@ -516,6 +515,16 @@ vim.lsp.config("zls", {
 	filetypes = { "zig", "zir" },
 	root_markers = { "build.zig", "build.zig.zon", ".git" },
 	capabilities = blink.get_lsp_capabilities(),
+	settings = {
+		zls = {
+			-- Make sure to add something like this to your build.zig
+			-- const check = b.step("check", "Check step if the project & tests compile, used by LSP");
+			-- check.dependOn(&exe.step);
+			-- check.dependOn(&exe_tests.step);
+			enable_build_on_save = true,
+			build_on_save_step = "check",
+		},
+	},
 })
 vim.lsp.enable("zls")
 
@@ -1027,4 +1036,3 @@ vim.keymap.set("n", "<leader>rt", function()
 
 	vim.notify("Started Typst & Zathura", vim.log.levels.INFO)
 end, { desc = "[R]un [T]ypst watch and Zathura" })
-
